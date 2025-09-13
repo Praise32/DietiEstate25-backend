@@ -1,0 +1,219 @@
+import express from "express";
+import validate from "express-zod-safe";
+
+import { deleteFileFromS3, getPresignedUrl, upload } from "@/api/middleware/photo.middleware";
+import {
+  postIdSchema,
+  postInsertSchema,
+  postUpdateSchema,
+} from "@/db/schema/posts";
+import * as commentsRepository from "@/repository/comment.repository";
+import * as photoRepository from "@/repository/photos.repository";
+import * as postsRepository from "@/repository/posts.repository";
+import * as userRepository from "@/repository/user.repository";
+import passport from "@/utils/passport";
+
+import { authMiddleware, isOwnerMiddlewarePosts } from "../middleware/auth.middleware";
+
+const router = express.Router();
+
+router.get("/", async (req, res) => {
+  // Prendi page e limit dalla query, con valori di default
+  const page = Number.parseInt(req.query.page as string) || 1;
+  const limit = Number.parseInt(req.query.limit as string) || 10;
+  const offset = (page - 1) * limit;
+
+  // Recupera solo i post per la pagina richiesta
+  const posts = await postsRepository.getAllPosts({ limit, offset });
+
+  // Recupera tutte le foto per ogni post e genera presigned URL
+  const postsWithPhotos = await Promise.all(
+    posts.map(async (post) => {
+      const photos = await photoRepository.getAllPhotoByPostId(post.id);
+      const photosWithUrls = await Promise.all(
+        photos.map(async photo => ({
+          ...photo,
+          url: await getPresignedUrl(photo.filename),
+        })),
+      );
+      return { ...post, photos: photosWithUrls };
+    }),
+  );
+
+  // Conta il totale dei post per calcolare il numero di pagine
+  const total = await postsRepository.countAllPosts?.() ?? postsWithPhotos.length;
+  res.status(200).json({
+    data: postsWithPhotos,
+    page,
+    limit,
+    total,
+    totalPages: Math.ceil(total / limit),
+  });
+});
+
+router.get("/:id", validate({ params: postIdSchema }), async (req, res) => {
+  const foundPost = await postsRepository.getPostById(req.params.id);
+  if (!foundPost) {
+    res.status(404).end();
+    return;
+  }
+
+  const author = await userRepository.getUserById(foundPost.userId);
+
+  if (!author) {
+    res.status(404).json({ message: "Autore non trovato." });
+    return;
+  }
+
+  // mando tutti i commenti del post
+  const comments = await commentsRepository.getCommentsByPostId(foundPost.id);
+  if (!comments) {
+    res.status(404).json({ message: "Commenti non trovati." });
+    return;
+  }
+
+  // metto l'autore in ogni commento
+  const commentsWithAuthor = await Promise.all(
+    comments.map(async (comment) => {
+      const commentAuthor = await userRepository.getUserById(comment.userId);
+      return {
+        ...comment,
+        author: commentAuthor
+          ? {
+            id: commentAuthor.id,
+            name: commentAuthor.name,
+            email: commentAuthor.email,
+          }
+          : null,
+      };
+    }),
+  );
+  // Recupera tutte le foto del post
+  const photos = await photoRepository.getAllPhotoByPostId(foundPost.id);
+  // Genera i presigned URL per tutte le foto
+  const photosWithUrls = await Promise.all(
+    photos.map(async photo => ({
+      ...photo,
+      url: await getPresignedUrl(photo.filename),
+    })),
+  );
+  res.json({ ...foundPost, photos: photosWithUrls, author, comments: commentsWithAuthor });
+});
+
+router.post("/", passport.authenticate("jwt", { session: false }), validate({ body: postInsertSchema }), async (req, res) => {
+  const PostInsert = await postsRepository.createPost({ ...req.body, userId: req.user!.id! });
+  res.status(201).json(PostInsert);
+});
+
+router.delete("/:id", passport.authenticate("jwt", { session: false }), isOwnerMiddlewarePosts, async (req, res) => {
+  const deletePost = postIdSchema.safeParse(req.params);
+  if (deletePost.error || !deletePost.data) {
+    res.status(400).json(deletePost.error);
+    return;
+  }
+  const Photo = await photoRepository.getAllPhotoByPostId(deletePost.data.id);
+
+  if (Photo && Array.isArray(Photo)) {
+    for (const photo of Photo) {
+      await deleteFileFromS3(photo.filename);
+    }
+  }
+
+  const Post = await postsRepository.deletePost(deletePost.data.id);
+  if (!Post) {
+    res.status(404).end();
+    return;
+  }
+
+  res.json(Post);
+});
+
+router.put("/:id", authMiddleware, isOwnerMiddlewarePosts, async (req, res) => {
+  const putID = postIdSchema.safeParse(req.params);
+  if (putID.error || !putID.data) {
+    res.status(400).json(putID.error);
+    return;
+  }
+
+  const putBody = postUpdateSchema.safeParse(req.body);
+  if (putBody.error || !putBody.data) {
+    res.status(400).json(putBody.error);
+    return;
+  }
+
+  const Post = await postsRepository.updatePost(req.posts!.id, putBody.data);
+  if (!Post) {
+    res.status(404).end();
+    return;
+  }
+
+  res.json(Post);
+});
+
+router.post("/:id/upload", authMiddleware, isOwnerMiddlewarePosts, upload.array("imageFiles", 5), async (req, res) => {
+  if (!req.files || (req.files as Express.Multer.File[]).length === 0) {
+    res.status(400).json({ message: "Nessun file caricato." });
+    return;
+  }
+
+  const filesS3 = req.files as Express.MulterS3.File[];
+  const uploadedFiles = filesS3.map(file => ({
+    url: file.location,
+    fileName: file.key,
+    bucket: file.bucket,
+    mimetype: file.contentType,
+    size: file.size,
+  }));
+
+  const photos = [];
+  for (const file of uploadedFiles) {
+    const photo = await photoRepository.createPhoto({
+      url: file.url,
+      filename: file.fileName,
+      userId: req.user!.id!,
+      postsId: req.posts!.id!,
+    });
+    photos.push(photo);
+  }
+  res.status(201).json(photos);
+});
+
+router.delete("/photos/:id", passport.authenticate("jwt", { session: false }), async (req, res) => {
+  const photoId = Number(req.params.id);
+  if (Number.isNaN(photoId)) {
+    res.status(400).json({ message: "ID foto non valido." });
+    return;
+  }
+
+  // Recupera la foto dal DB
+  const photo = await photoRepository.getPhotoById(photoId);
+  if (!photo) {
+    res.status(404).json({ message: "Foto non trovata." });
+    return;
+  }
+
+  // Controlla che la foto appartenga all'utente autenticato
+  if (photo.userId !== req.user!.id) {
+    res.status(403).json({ message: "Non sei autorizzato a eliminare questa foto." });
+    return;
+  }
+
+  // Elimina dal DB
+  const deleted = await photoRepository.deletePhoto(photoId);
+  if (!deleted) {
+    res.status(500).json({ message: "Errore durante l'eliminazione della foto dal database." });
+    return;
+  }
+
+  // Elimina da S3
+  try {
+    await deleteFileFromS3(photo.filename);
+  }
+  catch (err) {
+    // Logga ma non blocca la risposta
+    console.error("Errore durante l'eliminazione da S3:", err);
+  }
+
+  res.status(200).json({ message: "Foto eliminata con successo." });
+});
+export default router;

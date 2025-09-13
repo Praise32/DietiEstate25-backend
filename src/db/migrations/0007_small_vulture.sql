@@ -1,0 +1,1 @@
+ALTER TABLE "cats" RENAME COLUMN "user_id" TO "userId";

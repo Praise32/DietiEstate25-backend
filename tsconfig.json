@@ -1,0 +1,24 @@
+{
+  "compilerOptions": {
+    "target": "ESNext",
+    "baseUrl": ".",
+    "module": "ESNext",
+    "moduleResolution": "node", // Change this to "node"
+    "paths": {
+      "@/*": [
+        "src/*"
+      ]
+    },
+    "typeRoots": ["node_modules/@types", "@types"],
+    "types": [
+      "node"
+    ],
+    "strict": true,
+    "outDir": "./dist",
+    "esModuleInterop": true, // Add this for proper module imports
+    "skipLibCheck": true
+  },
+  "tsc-alias": {
+    "resolveFullPaths": true
+  }
+}

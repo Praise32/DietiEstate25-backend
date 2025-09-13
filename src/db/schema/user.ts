@@ -1,0 +1,78 @@
+import { relations } from "drizzle-orm";
+import { pgTable, serial, text, timestamp } from "drizzle-orm/pg-core";
+import { createInsertSchema, createSelectSchema } from "drizzle-zod";
+import { z } from "zod";
+
+import { posts } from "./posts";
+
+export const roles = pgTable("roles", {
+  id: serial().primaryKey(),
+  name: text().notNull(), // admin, support, manager, agent, customer
+});
+
+const user = pgTable("users", {
+  id: serial().primaryKey(),
+  googleId: text("google_id"),
+  name: text(),
+  phone: text().unique().notNull(),
+  email: text().unique(),
+  password: text().notNull(),
+  createdAt: timestamp("created_at", { mode: "string" }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { mode: "string" }).notNull().defaultNow(),
+  roleId: serial("role_id").notNull().references(() => roles.id),
+
+});
+
+
+export const userInserSchema = createInsertSchema(user, {
+  email: schema => schema.email().nonempty(),
+  phone: schema => schema.nonempty(),
+  password: schema => schema.nonempty(),
+  name: schema => schema.nonempty(),
+}).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export const userSelectSchema = createInsertSchema(user, {
+  password: schema => schema.nonempty(),
+}).omit({
+  createdAt: true,
+  updatedAt: true,
+  phone: true,
+}).superRefine((data, context) => {
+  if (!data.name && !data.email) {
+    context.addIssue({
+      code: z.ZodIssueCode.invalid_type,
+      expected: "string",
+      received: "undefined",
+      path: ["name", "email"],
+      message: "At least one of name or email must be provided",
+    });
+  }
+});
+
+export const userIdSchema = createSelectSchema(user).omit({
+  name: true,
+  phone: true,
+  email: true,
+  password: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export const userLoginSchema = z.object({
+  identifier: z.string().nonempty(),
+  password: z.string().nonempty(),
+});
+
+export type UserInserSchema = z.infer<typeof userInserSchema>;
+export type UserSelectSchema = z.infer<typeof userSelectSchema>;
+export type UserIdSchema = z.infer<typeof userIdSchema>;
+
+export const usersRelations = relations(user, ({ many }) => ({
+  posts: many(posts),
+}));
+
+export default user;
