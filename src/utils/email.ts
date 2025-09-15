@@ -1,16 +1,17 @@
-import nodemailer from 'nodemailer';
-import env from '@/env';
+import nodemailer from "nodemailer";
+
+import env from "@/env";
 
 // Configura il transporter
 const transporter = nodemailer.createTransport({
-  service: 'gmail',
+  service: "gmail",
   auth: {
     user: env.GMAIL_USER,
     pass: env.GMAIL_APP_PASSWORD, // Password specifica per le app
   },
   tls: {
-    rejectUnauthorized: false
-  }
+    rejectUnauthorized: false,
+  },
 });
 
 export async function sendInviteEmail(email: string, token: string) {
@@ -19,7 +20,7 @@ export async function sendInviteEmail(email: string, token: string) {
   const mailOptions = {
     from: env.EMAIL_FROM,
     to: email,
-    subject: 'Invito a DietiEstates25',
+    subject: "Invito a DietiEstates25",
     html: `
       <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
         <h1 style="color: #2c3e50;">Benvenuto in DietiEstates25</h1>
@@ -41,14 +42,15 @@ export async function sendInviteEmail(email: string, token: string) {
           Se non hai richiesto questo invito, puoi ignorare questa email.
         </p>
       </div>
-    `
+    `,
   };
 
   try {
     await transporter.sendMail(mailOptions);
-    console.log('Email di invito inviata con successo');
-  } catch (error) {
-    console.error('Errore nell\'invio dell\'email:', error);
-    throw new Error('Impossibile inviare l\'email di invito');
+    console.log("Email di invito inviata con successo");
+  }
+  catch (error) {
+    console.error("Errore nell'invio dell'email:", error);
+    throw new Error("Impossibile inviare l'email di invito");
   }
 }

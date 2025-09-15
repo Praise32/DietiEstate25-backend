@@ -23,7 +23,6 @@ const user = pgTable("users", {
 
 });
 
-
 export const userInserSchema = createInsertSchema(user, {
   email: schema => schema.email().nonempty(),
   phone: schema => schema.nonempty(),
@@ -38,9 +37,6 @@ export const userInserSchema = createInsertSchema(user, {
 export const userSelectSchema = createInsertSchema(user, {
   password: schema => schema.nonempty(),
 }).omit({
-  createdAt: true,
-  updatedAt: true,
-  phone: true,
 }).superRefine((data, context) => {
   if (!data.name && !data.email) {
     context.addIssue({

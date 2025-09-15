@@ -14,6 +14,9 @@ const EnvSchema = z.object({
   GOOGLE_CLIENT_SECRET: z.string().nonempty(),
   GOOGLE_CALLBACK_URL: z.string().nonempty(),
   FRONTEND_URL: z.string().nonempty().url(),
+  GMAIL_USER: z.string().nonempty().email(),
+  GMAIL_APP_PASSWORD: z.string().nonempty(),
+  EMAIL_FROM: z.string().nonempty().email(),
 });
 
 export type EnvSchemtype = z.infer<typeof EnvSchema>;

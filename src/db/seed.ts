@@ -27,4 +27,4 @@ export async function seedRoles() {
       await db.insert(roles).values({ name: roleName });
     }
   }
-}
+}message

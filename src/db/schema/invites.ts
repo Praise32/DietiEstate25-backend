@@ -18,7 +18,7 @@ export const invites = pgTable('invites', {
   email: text('email').notNull(),
   role: text('role').notNull(),
   token: text('token').notNull(),
-  invitedBy: integer('invited_by').references(() => user.id),
+  invitedBy: integer('invited_by').references(() => user.id).notNull(),
   expiresAt: timestamp('expires_at').notNull(),
   used: boolean('used').notNull().default(false),
   createdAt: timestamp('created_at').defaultNow(),

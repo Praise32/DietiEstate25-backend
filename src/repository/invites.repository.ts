@@ -1,6 +1,7 @@
+import { eq } from "drizzle-orm";
+
 import { db } from "@/db";
 import { invites } from "@/db/schema/invites";
-import { eq } from "drizzle-orm";
 
 export async function createInvite(data: {
   email: string;
