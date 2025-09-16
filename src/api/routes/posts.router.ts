@@ -3,9 +3,11 @@ import validate from "express-zod-safe";
 
 import { deleteFileFromS3, getPresignedUrl, upload } from "@/api/middleware/photo.middleware";
 import {
+  apiPostInsertSchema,
   postIdSchema,
   postInsertSchema,
   postUpdateSchema,
+  searchFiltersSchema,
 } from "@/db/schema/posts";
 import * as commentsRepository from "@/repository/comment.repository";
 import * as photoRepository from "@/repository/photos.repository";
@@ -18,37 +20,46 @@ import { authMiddleware, isOwnerMiddlewarePosts } from "../middleware/auth.middl
 const router = express.Router();
 
 router.get("/", async (req, res) => {
-  // Prendi page e limit dalla query, con valori di default
-  const page = Number.parseInt(req.query.page as string) || 1;
-  const limit = Number.parseInt(req.query.limit as string) || 10;
-  const offset = (page - 1) * limit;
+  // 1. Validare i query params con lo schema Zod
+  const validation = searchFiltersSchema.safeParse(req.query);
 
-  // Recupera solo i post per la pagina richiesta
-  const posts = await postsRepository.getAllPosts({ limit, offset });
+  if (!validation.success) {
+    return res.status(400).json({ errors: validation.error.issues });
+  }
 
-  // Recupera tutte le foto per ogni post e genera presigned URL
-  const postsWithPhotos = await Promise.all(
-    posts.map(async (post) => {
-      const photos = await photoRepository.getAllPhotoByPostId(post.id);
-      const photosWithUrls = await Promise.all(
-        photos.map(async photo => ({
-          ...photo,
-          url: await getPresignedUrl(photo.filename),
-        })),
-      );
-      return { ...post, photos: photosWithUrls };
-    }),
-  );
+  const filters = validation.data;
 
-  // Conta il totale dei post per calcolare il numero di pagine
-  const total = await postsRepository.countAllPosts?.() ?? postsWithPhotos.length;
-  res.status(200).json({
-    data: postsWithPhotos,
-    page,
-    limit,
-    total,
-    totalPages: Math.ceil(total / limit),
-  });
+  try {
+    // 2. Passare i filtri validati alle funzioni del repository
+    const posts = await postsRepository.getAllPosts(filters);
+    const total = await postsRepository.countAllPosts(filters);
+
+    // Il resto della logica per arricchire con le foto rimane invariato
+    const postsWithPhotos = await Promise.all(
+      posts.map(async (post) => {
+        const photos = await photoRepository.getAllPhotoByPostId(post.id);
+        const photosWithUrls = await Promise.all(
+          photos.map(async photo => ({
+            ...photo,
+            url: await getPresignedUrl(photo.filename),
+          })),
+        );
+        return { ...post, photos: photosWithUrls };
+      }),
+    );
+
+    res.status(200).json({
+      data: postsWithPhotos,
+      page: filters.page,
+      limit: filters.limit,
+      total,
+      totalPages: Math.ceil(total / filters.limit),
+    });
+  }
+  catch (error) {
+    console.error("Errore durante la ricerca dei post:", error);
+    res.status(500).json({ message: "Errore interno del server" });
+  }
 });
 
 router.get("/:id", validate({ params: postIdSchema }), async (req, res) => {
@@ -80,10 +91,10 @@ router.get("/:id", validate({ params: postIdSchema }), async (req, res) => {
         ...comment,
         author: commentAuthor
           ? {
-            id: commentAuthor.id,
-            name: commentAuthor.name,
-            email: commentAuthor.email,
-          }
+              id: commentAuthor.id,
+              name: commentAuthor.name,
+              email: commentAuthor.email,
+            }
           : null,
       };
     }),
@@ -100,7 +111,7 @@ router.get("/:id", validate({ params: postIdSchema }), async (req, res) => {
   res.json({ ...foundPost, photos: photosWithUrls, author, comments: commentsWithAuthor });
 });
 
-router.post("/", passport.authenticate("jwt", { session: false }), validate({ body: postInsertSchema }), async (req, res) => {
+router.post("/", passport.authenticate("jwt", { session: false }), validate({ body: apiPostInsertSchema }), async (req, res) => {
   const PostInsert = await postsRepository.createPost({ ...req.body, userId: req.user!.id! });
   res.status(201).json(PostInsert);
 });

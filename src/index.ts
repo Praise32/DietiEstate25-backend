@@ -1,20 +1,21 @@
 import cors from "cors";
 import express from "express";
 
+import adminUsersRouter from "@/api/routes/admin.router";
 import commentsRouter from "@/api/routes/comments.router";
+import inviteRouter from "@/api/routes/invites.router";
 import loginRouter from "@/api/routes/login.router";
 import postsRouter from "@/api/routes/posts.router";
-import adminUsersRouter from "@/api/routes/admin.router";
-import inviteRouter from "@/api/routes/invites.router";
+import { seedAdmin, seedRoles } from "@/db/seed";
 import env from "@/env";
 import passport from "@/utils/passport";
-import { seedRoles , seedAdmin } from "@/db/seed";
+
 const app = express();
 
 const corsOptions = {
   origin: [
     "http://localhost:4200",
-    "https://accounts.google.com"
+    "https://accounts.google.com",
   ],
   methods: ["GET", "POST", "PUT", "DELETE"],
   allowedHeaders: ["Content-Type", "Authorization"],

@@ -1,22 +1,18 @@
 import bcrypt from "bcryptjs";
+import { eq } from "drizzle-orm";
 import express from "express";
 import validate from "express-zod-safe";
 import jwt from "jsonwebtoken";
-import { db } from "@/db";
-import { roles } from "@/db/schema/user";
-import { eq } from "drizzle-orm";
-import { authMiddleware } from "../middleware/auth.middleware";
-import { requireRole } from "../middleware/role.middleware";
 import { z } from "zod";
 
-import {
-  userInserSchema,
-  userLoginSchema,
-  userSelectSchema,
-} from "@/db/schema/user";
+import { db } from "@/db";
+import { roles, userInserSchema, userLoginSchema, userSelectSchema } from "@/db/schema/user";
 import env from "@/env";
 import * as loginRepositoy from "@/repository/login.repository";
 import passport from "@/utils/passport";
+
+import { authMiddleware } from "../middleware/auth.middleware";
+import { requireRole } from "../middleware/role.middleware";
 
 const router = express.Router();
 
@@ -26,7 +22,6 @@ router.post(
   async (req, res) => {
     try {
       req.body.password = bcrypt.hashSync(req.body.password, 8);
-
 
       const [customerRole] = await db.select().from(roles).where(eq(roles.name, "customer"));
       req.body.roleId = customerRole.id;
@@ -74,21 +69,20 @@ router.post(
   },
 );
 
-
 // Route per iniziare l'autenticazione Google
 router.get(
-  '/google',
-  passport.authenticate('google', { 
-    scope: ['profile', 'email'] 
-  })
+  "/google",
+  passport.authenticate("google", {
+    scope: ["profile", "email"],
+  }),
 );
 
 // Route di callback per Google
 router.get(
-  '/google/callback',
-  passport.authenticate('google', { 
+  "/google/callback",
+  passport.authenticate("google", {
     session: false,
-    failureRedirect: '/login' 
+    failureRedirect: "/login",
   }),
   async (req, res) => {
     const token = jwt.sign(
@@ -98,24 +92,23 @@ router.get(
         email: req.user!.email,
       },
       env.JWT_SECRET_KEY,
-      { expiresIn: "24h" }
+      { expiresIn: "24h" },
     );
 
     // Redirect al frontend con il token
-    //res.redirect(`${env.FRONTEND_URL}/auth?token=${token}`);
+    // res.redirect(`${env.FRONTEND_URL}/auth?token=${token}`);
 
-    //Prova senza frontend
-        res.json({ 
+    // Prova senza frontend
+    res.json({
       message: "Autenticazione Google riuscita",
       token,
       user: {
         id: req.user!.id,
         name: req.user!.name,
-        email: req.user!.email
-      }
+        email: req.user!.email,
+      },
     });
-
-  }
+  },
 );
 
 router.post(

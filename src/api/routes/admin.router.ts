@@ -18,7 +18,7 @@ import { requireRole } from "../middleware/role.middleware";
 
 const router = express.Router();
 
-// Admin invia un invito via email
+/* Funzione Attualmente inutile
 router.post(
   "/send",
   authMiddleware,
@@ -62,6 +62,7 @@ router.post(
     }
   },
 );
+*/
 
 // Admin crea un nuovo utente di supporto o manager
 router.post(

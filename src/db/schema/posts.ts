@@ -1,28 +1,64 @@
-import type { z } from "zod";
-
 import { relations, sql } from "drizzle-orm";
 import {
+  boolean,
+  customType,
   integer,
+  numeric, // Usa numeric per i prezzi per evitare imprecisioni
+  pgEnum, // Importa pgEnum per i tipi enumerativi
   pgTable,
   serial,
   text,
   timestamp,
 } from "drizzle-orm/pg-core";
 import { createInsertSchema, createSchemaFactory, createUpdateSchema } from "drizzle-zod";
+import { z } from "zod";
 
 import { comments } from "./comments";
 import { photos } from "./photo";
 import user from "./user";
 
+// Definisci un tipo per la categoria dell'annuncio
+export const listingTypeEnum = pgEnum("listing_type", ["vendita", "affitto"]);
+
+// Definiamo un tipo custom per la colonna geography di PostGIS
+const geography = customType<{
+  data: { lat: number; lon: number };
+  driverData: string;
+}>({
+  dataType() {
+    // SRID 4326 è lo standard per le coordinate GPS (lat/lon)
+    return "geography(Point, 4326)";
+  },
+  toDriver(value: { lat: number; lon: number }): string {
+    return `SRID=4326;POINT(${value.lon} ${value.lat})`;
+  },
+});
+
 export const posts = pgTable("posts", {
-  id: serial().primaryKey(),
-  title: text().notNull(),
-  description: text(),
-  latitude: text(),
-  longitude: text(),
-  address: text().notNull(),
-  city: text().notNull(),
-  cap: integer().notNull(),
+  id: serial("id").primaryKey(),
+  title: text("title").notNull(),
+  description: text("description"),
+
+  // Campi di localizzazione
+  // Rimuoviamo latitude e longitude
+  // latitude: text("latitude"),
+  // longitude: text("longitude"),
+  location: geography("location").notNull(), // <-- NUOVA COLONNA GEOSPRAZIAL
+  address: text("address").notNull(),
+  city: text("city").notNull(),
+  cap: integer("cap").notNull(),
+
+  // === NUOVI CAMPI PER LA RICERCA AVANZATA ===
+  price: numeric("price", { precision: 10, scale: 2 }).notNull(), // Es: 150000.00
+  listingType: listingTypeEnum("listing_type").notNull(), // 'vendita' o 'affitto'
+  rooms: integer("rooms"),
+  size: integer("size"), // Dimensione in metri quadri
+  floor: integer("floor"),
+  hasElevator: boolean("has_elevator").default(false),
+  energyClass: text("energy_class"), // Es: "A+", "G", etc.
+  // Potresti aggiungere altri campi boolean o text qui (es. hasGarden, etc.)
+
+  // Campi esistenti
   createdAt: timestamp("created_at", { mode: "string" }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { mode: "string" })
     .notNull()
@@ -48,8 +84,7 @@ const { createSelectSchema } = createSchemaFactory({
 export const postIdSchema = createSelectSchema(posts).omit({
   title: true,
   description: true,
-  latitude: true,
-  longitude: true,
+  location: true,
   address: true,
   city: true,
   cap: true,
@@ -81,6 +116,45 @@ export const postUpdateSchema = createUpdateSchema(posts).omit({
   }
 });
 
+export const searchFiltersSchema = z.object({
+  // Filtri di testo
+  city: z.string().optional(),
+  listingType: z.enum(["vendita", "affitto"]).optional(),
+  energyClass: z.string().optional(),
+
+  // Filtri numerici (vengono da query string, quindi li trasformiamo)
+  minPrice: z.coerce.number().min(0).optional(),
+  maxPrice: z.coerce.number().min(0).optional(),
+  minRooms: z.coerce.number().int().min(1).optional(),
+  maxRooms: z.coerce.number().int().min(1).optional(),
+  minSize: z.coerce.number().int().min(0).optional(),
+
+  // Filtri boolean
+  hasElevator: z.enum(["true", "false"]).transform(val => val === "true").optional(),
+
+  // Paginazione
+  page: z.coerce.number().int().min(1).default(1),
+  limit: z.coerce.number().int().min(1).max(100).default(10),
+
+  latitude: z.coerce.number().optional(),
+  longitude: z.coerce.number().optional(),
+  radius: z.coerce.number().min(0).optional(), // Raggio in metri
+}).refine((data) => {
+  // Se un parametro geo è presente, devono esserlo tutti e tre
+  if (data.latitude || data.longitude || data.radius) {
+    return data.latitude !== undefined && data.longitude !== undefined && data.radius !== undefined;
+  }
+  return true;
+}, { message: "Per la ricerca a raggio sono necessari latitudine, longitudine e raggio." });
+
+// Schema per l'inserimento via API che accetta lat/lon separati
+export const apiPostInsertSchema = postInsertSchema.extend({
+  latitude: z.number(),
+  longitude: z.number(),
+});
+
+export type ApiPostInsertSchema = z.infer<typeof apiPostInsertSchema>;
+export type SearchFilters = z.infer<typeof searchFiltersSchema>;
 export type PostInsertSchema = z.infer<typeof postInsertSchema>;
 export type PostUpdateSchema = z.infer<typeof postUpdateSchema>;
 export type PostIdSchema = z.infer<typeof postIdSchema>;

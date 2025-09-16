@@ -1,8 +1,8 @@
-import { db } from "@/db";
-import { roles } from "@/db/schema/user";
-import { eq } from "drizzle-orm";
 import bcrypt from "bcryptjs";
-import user from "@/db/schema/user";
+import { eq } from "drizzle-orm";
+
+import { db } from "@/db";
+import user, { roles } from "@/db/schema/user";
 
 export async function seedAdmin() {
   const [adminRole] = await db.select().from(roles).where(eq(roles.name, "admin"));
@@ -27,4 +27,4 @@ export async function seedRoles() {
       await db.insert(roles).values({ name: roleName });
     }
   }
-}message
+}

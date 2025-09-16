@@ -7,6 +7,7 @@ import { inviteSchema } from "@/db/schema/invites";
 import env from "@/env";
 import * as inviteRepository from "@/repository/invites.repository";
 import * as userRepository from "@/repository/user.repository";
+import { sendInviteEmail } from "@/utils/email";
 
 import { authMiddleware } from "../middleware/auth.middleware";
 import { requireRole } from "../middleware/role.middleware";
@@ -17,7 +18,7 @@ const router = express.Router();
 router.post(
   "/create",
   authMiddleware,
-  requireRole("agent", "support", "manager"),
+  requireRole("agent", "support", "manager", "admin"),
   validate({ body: inviteSchema }),
   async (req, res) => {
     if (!req.user || !req.user.id) {
@@ -41,19 +42,30 @@ router.post(
       { expiresIn: "24h" },
     );
 
-    await inviteRepository.createInvite({
-      email,
-      role,
-      token,
-      invitedBy: req.user.id,
-      expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000),
-    });
+    try {
+      // Crea l'invito nel database
+      await inviteRepository.createInvite({
+        email,
+        role,
+        token,
+        invitedBy: req.user.id,
+        expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000),
+      });
 
-    // Per test senza frontend, restituiamo il token direttamente
-    res.json({
-      message: "Invito creato con successo",
-      registrationLink: `http://localhost:5003/invite/register/${token}`,
-    });
+      // Invia l'email di invito
+      await sendInviteEmail(email, token);
+
+      res.status(201).json({
+        message: "Invito creato e inviato con successo",
+        registrationLink: `${env.FRONTEND_URL}/register/invite/${token}`,
+        messageBack: "Invito creato con successo (Prova BackEnd)",
+        registrationLinkBack: `http://localhost:5003/invite/register/${token}`,
+      });
+    }
+    catch (error) {
+      console.error("Errore durante la creazione o l'invio dell'invito:", error);
+      res.status(500).json({ message: "Si è verificato un errore durante l'invio dell'invito.", error });
+    }
   },
 );
 
