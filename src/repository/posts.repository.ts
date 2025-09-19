@@ -1,6 +1,6 @@
 import type { SQL } from "drizzle-orm";
 
-import { and, eq, gte, lte, sql } from "drizzle-orm";
+import { and, eq, gte, lte, sql , desc} from "drizzle-orm";
 
 import type { ApiPostInsertSchema, PostInsertSchema, PostUpdateSchema, SearchFilters } from "@/db/schema/posts";
 
@@ -81,6 +81,14 @@ export async function getAllPosts(filters: SearchFilters) {
   }
 
   return query;
+}
+
+export async function getPostsByAgencyId(agencyId: number) {
+  return db
+    .select()
+    .from(posts)
+    .where(eq(posts.agencyId, agencyId))
+    .orderBy(desc(posts.createdAt));
 }
 
 export async function countAllPosts(filters: Omit<SearchFilters, "page" | "limit">) {

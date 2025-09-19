@@ -1,2 +1,0 @@
-ALTER TABLE "cats" RENAME COLUMN "userId" TO "user_id";--> statement-breakpoint
-ALTER TABLE "cats" ADD CONSTRAINT "cats_user_id_users_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."users"("id") ON DELETE no action ON UPDATE no action;

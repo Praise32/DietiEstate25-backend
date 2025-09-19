@@ -13,9 +13,9 @@ import {
 import { createInsertSchema, createSchemaFactory, createUpdateSchema } from "drizzle-zod";
 import { z } from "zod";
 
-import { comments } from "./comments";
 import { photos } from "./photo";
 import user from "./user";
+import { agencies } from "./agencies";
 
 // Definisci un tipo per la categoria dell'annuncio
 export const listingTypeEnum = pgEnum("listing_type", ["vendita", "affitto"]);
@@ -27,7 +27,7 @@ const geography = customType<{
 }>({
   dataType() {
     // SRID 4326 è lo standard per le coordinate GPS (lat/lon)
-    return "geography(Point, 4326)";
+    return "geography";
   },
   toDriver(value: { lat: number; lon: number }): string {
     return `SRID=4326;POINT(${value.lon} ${value.lat})`;
@@ -65,6 +65,7 @@ export const posts = pgTable("posts", {
     .defaultNow()
     .$onUpdate(() => sql`now()`),
   userId: serial("user_id").notNull().references(() => user.id),
+  agencyId: integer("agency_id").references(() => agencies.id),
 });
 
 export const postsRelations = relations(posts, ({ one, many }) => ({
@@ -73,10 +74,12 @@ export const postsRelations = relations(posts, ({ one, many }) => ({
     references: [user.id],
     relationName: "posts",
   }),
+  agency: one(agencies, {
+    fields: [posts.agencyId],
+    references: [agencies.id],
+  }),
   photo: many(photos),
-  comments: many(comments),
 }));
-
 const { createSelectSchema } = createSchemaFactory({
   coerce: true,
 });

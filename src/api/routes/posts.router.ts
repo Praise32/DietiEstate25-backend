@@ -1,4 +1,4 @@
-import express from "express";
+import express, { type Request, type Response, type RequestHandler } from "express";
 import validate from "express-zod-safe";
 
 import { deleteFileFromS3, getPresignedUrl, upload } from "@/api/middleware/photo.middleware";
@@ -9,7 +9,6 @@ import {
   postUpdateSchema,
   searchFiltersSchema,
 } from "@/db/schema/posts";
-import * as commentsRepository from "@/repository/comment.repository";
 import * as photoRepository from "@/repository/photos.repository";
 import * as postsRepository from "@/repository/posts.repository";
 import * as userRepository from "@/repository/user.repository";
@@ -19,7 +18,7 @@ import { authMiddleware, isOwnerMiddlewarePosts } from "../middleware/auth.middl
 
 const router = express.Router();
 
-router.get("/", async (req, res) => {
+router.get("/", (async (req: Request, res: Response) => {
   // 1. Validare i query params con lo schema Zod
   const validation = searchFiltersSchema.safeParse(req.query);
 
@@ -60,7 +59,7 @@ router.get("/", async (req, res) => {
     console.error("Errore durante la ricerca dei post:", error);
     res.status(500).json({ message: "Errore interno del server" });
   }
-});
+}) as RequestHandler);
 
 router.get("/:id", validate({ params: postIdSchema }), async (req, res) => {
   const foundPost = await postsRepository.getPostById(req.params.id);
@@ -76,29 +75,6 @@ router.get("/:id", validate({ params: postIdSchema }), async (req, res) => {
     return;
   }
 
-  // mando tutti i commenti del post
-  const comments = await commentsRepository.getCommentsByPostId(foundPost.id);
-  if (!comments) {
-    res.status(404).json({ message: "Commenti non trovati." });
-    return;
-  }
-
-  // metto l'autore in ogni commento
-  const commentsWithAuthor = await Promise.all(
-    comments.map(async (comment) => {
-      const commentAuthor = await userRepository.getUserById(comment.userId);
-      return {
-        ...comment,
-        author: commentAuthor
-          ? {
-              id: commentAuthor.id,
-              name: commentAuthor.name,
-              email: commentAuthor.email,
-            }
-          : null,
-      };
-    }),
-  );
   // Recupera tutte le foto del post
   const photos = await photoRepository.getAllPhotoByPostId(foundPost.id);
   // Genera i presigned URL per tutte le foto
@@ -108,7 +84,7 @@ router.get("/:id", validate({ params: postIdSchema }), async (req, res) => {
       url: await getPresignedUrl(photo.filename),
     })),
   );
-  res.json({ ...foundPost, photos: photosWithUrls, author, comments: commentsWithAuthor });
+  res.json({ ...foundPost, photos: photosWithUrls, author});
 });
 
 router.post("/", passport.authenticate("jwt", { session: false }), validate({ body: apiPostInsertSchema }), async (req, res) => {
