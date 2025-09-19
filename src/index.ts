@@ -4,7 +4,6 @@ import express from "express";
 import adminUsersRouter from "@/api/routes/admin.router";
 import appointmentsRouter from "@/api/routes/appointments.router";
 import agenciesRouter from "@/api/routes/agencies.router";
-import commentsRouter from "@/api/routes/comments.router";
 import inviteRouter from "@/api/routes/invites.router";
 import loginRouter from "@/api/routes/login.router";
 import postsRouter from "@/api/routes/posts.router";
@@ -34,7 +33,6 @@ await seedAdmin();
 
 app.use("/posts", postsRouter);
 app.use("/login", loginRouter);
-app.use("/comments", commentsRouter);
 app.use("/admin", adminUsersRouter);
 app.use("/invite", inviteRouter);
 app.use("/appointments", appointmentsRouter);

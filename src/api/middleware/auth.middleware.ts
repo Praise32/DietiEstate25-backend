@@ -4,7 +4,6 @@ import jwt from "jsonwebtoken";
 
 import { postIdSchema } from "@/db/schema/posts";
 import env from "@/env";
-import * as commentsRepository from "@/repository/comment.repository";
 import * as postsRepository from "@/repository/posts.repository";
 import * as userRepository from "@/repository/user.repository";
 
@@ -41,7 +40,11 @@ export async function authMiddleware(
         .json({ message: "Accesso negato. Nessun token fornito o formato non valido." });
       return;
     }
-    req.user = userFound;
+    const userWithFixedRole = {
+      ...userFound,
+      role: userFound.role ?? undefined
+    };
+    req.user = userWithFixedRole;
 
     // Passa al middleware successivo
     next();
@@ -75,21 +78,3 @@ export async function isOwnerMiddlewarePosts(
   next();
 }
 
-export async function isOwnerMiddlewareComments(
-  req: Request,
-  res: Response,
-  next: NextFunction,
-) {
-  const commentId = Number(req.params.id);
-  const foundComment = await commentsRepository.getCommentById(commentId);
-  if (!foundComment) {
-    res.status(404).end();
-    return;
-  }
-  if (foundComment.userId !== req.user!.id) {
-    res.status(403).json("Non sei autorizzato a modificare questo commento").end();
-    return;
-  }
-  req.comments = foundComment;
-  next();
-}

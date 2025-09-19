@@ -11,6 +11,7 @@ export async function getUserById(id: number) {
       email: user.email,
       phone: user.phone,
       password: user.password,
+      agencyId: user.agencyId,
       roleId: user.roleId,
       role: roles.name, // <-- nome del ruolo
       createdAt: user.createdAt,
