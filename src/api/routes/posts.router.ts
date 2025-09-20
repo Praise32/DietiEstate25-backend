@@ -18,6 +18,32 @@ import { authMiddleware, isOwnerMiddlewarePosts } from "../middleware/auth.middl
 
 const router = express.Router();
 
+router.get("/:id", validate({ params: postIdSchema }), async (req, res) => {
+  const foundPost = await postsRepository.getPostById(req.params.id);
+  if (!foundPost) {
+    res.status(404).end();
+    return;
+  }
+
+  const author = await userRepository.getUserById(foundPost.userId);
+
+  if (!author) {
+    res.status(404).json({ message: "Autore non trovato." });
+    return;
+  }
+
+  // Recupera tutte le foto del post
+  const photos = await photoRepository.getAllPhotoByPostId(foundPost.id);
+  // Genera i presigned URL per tutte le foto
+  const photosWithUrls = await Promise.all(
+    photos.map(async photo => ({
+      ...photo,
+      url: await getPresignedUrl(photo.filename),
+    })),
+  );
+  res.json({ ...foundPost, photos: photosWithUrls, author});
+});
+
 router.get("/", (async (req: Request, res: Response) => {
   // 1. Validare i query params con lo schema Zod
   const validation = searchFiltersSchema.safeParse(req.query);
@@ -61,31 +87,6 @@ router.get("/", (async (req: Request, res: Response) => {
   }
 }) as RequestHandler);
 
-router.get("/:id", validate({ params: postIdSchema }), async (req, res) => {
-  const foundPost = await postsRepository.getPostById(req.params.id);
-  if (!foundPost) {
-    res.status(404).end();
-    return;
-  }
-
-  const author = await userRepository.getUserById(foundPost.userId);
-
-  if (!author) {
-    res.status(404).json({ message: "Autore non trovato." });
-    return;
-  }
-
-  // Recupera tutte le foto del post
-  const photos = await photoRepository.getAllPhotoByPostId(foundPost.id);
-  // Genera i presigned URL per tutte le foto
-  const photosWithUrls = await Promise.all(
-    photos.map(async photo => ({
-      ...photo,
-      url: await getPresignedUrl(photo.filename),
-    })),
-  );
-  res.json({ ...foundPost, photos: photosWithUrls, author});
-});
 
 router.post("/", passport.authenticate("jwt", { session: false }), validate({ body: apiPostInsertSchema }), async (req, res) => {
   const PostInsert = await postsRepository.createPost({ ...req.body, userId: req.user!.id! });
