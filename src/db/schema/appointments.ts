@@ -7,7 +7,7 @@ import {
   text, 
   timestamp 
 } from "drizzle-orm/pg-core";
-import { createInsertSchema, createSelectSchema } from "drizzle-zod";
+import { createInsertSchema, createSchemaFactory } from "drizzle-zod";
 import { z } from "zod";
 
 import { posts } from "./posts";
@@ -50,6 +50,10 @@ export const appointmentsRelations = relations(appointments, ({ one }) => ({
   }),
 }));
 
+const { createSelectSchema } = createSchemaFactory({
+  coerce: true,
+});
+
 // Validazione con Zod
 export const appointmentInsertSchema = createInsertSchema(appointments, {
   requestedDate: z.coerce.date(),
@@ -58,15 +62,21 @@ export const appointmentInsertSchema = createInsertSchema(appointments, {
 
 export const appointmentSelectSchema = createSelectSchema(appointments);
 
-export const appointmentStatusUpdateSchema = z.object({
-  status: z.enum(["confirmed", "rejected"]),
-  notes: z.string().optional(),
+export const appointmentStatusUpdateSchema = createSelectSchema(appointments).pick({
+  status: true,
+  notes: true,
 });
 
-export const appointmentIdSchema = z.object({
-  id: z.coerce.number().int(),
+export const appointmentIdSchema = createSelectSchema(appointments).omit({
+  postId: true,
+  userId: true,
+  agentId: true,
+  requestedDate: true,
+  createdAt: true,
+  updatedAt: true,
+  notes: true,
+  status: true,
 });
-
 
 // Crea un nuovo schema per l'API che omette i campi aggiunti dal server
 export const appointmentApiSchema = appointmentInsertSchema.omit({

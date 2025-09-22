@@ -14,6 +14,7 @@ import * as appointmentsRepository from "@/repository/appointments.repository";
 import * as postsRepository from "@/repository/posts.repository";
 import * as userRepository from "@/repository/user.repository";
 import { sendAppointmentConfirmationEmail, sendAppointmentNotificationEmail, sendAppointmentRejectionEmail } from "@/utils/email";
+import passport from "@/utils/passport";
 
 const router = express.Router();
 
@@ -100,24 +101,26 @@ router.get("/",
 
 // Conferma o rifiuta un appuntamento (solo agenti)
 router.put("/:id",
-  authMiddleware,
+  passport.authenticate("jwt", { session: false }),
   requireRole("agent", "admin", "manager"),
-  (req: Request, res: Response, next: express.NextFunction) => {
-    const validation = appointmentIdSchema.safeParse(req.params);
-    if (!validation.success) {
-      res.status(400).json({ errors: validation.error.issues });
-      return;
-    }
-    next();
-  },
-  validate({ body: appointmentStatusUpdateSchema }),
   async (req: Request, res: Response) => {
     try {
-      const id = parseInt(req.params.id);
+        const putID = appointmentIdSchema.safeParse(req.params);
+        if (putID.error || !putID.data) {
+          res.status(400).json(putID.error);
+          return;
+        }
+      
+        const putBody = appointmentStatusUpdateSchema.safeParse(req.body);
+        if (putBody.error || !putBody.data) {
+          res.status(400).json(putBody.error);
+          return;
+        }
+      
       const { status, notes } = req.body;
 
       // Verifica che l'appuntamento esista
-      const appointment = await appointmentsRepository.getAppointmentById(id);
+      const appointment = await appointmentsRepository.getAppointmentById(putID.data.id);
       if (!appointment) {
         res.status(404).json({ message: "Appuntamento non trovato" });
         return;
@@ -131,7 +134,7 @@ router.put("/:id",
 
       // Aggiorna lo stato dell'appuntamento
       const updated = await appointmentsRepository.updateAppointmentStatus(
-        Number(id),
+        Number(putID.data.id),
         req.user!.id,
         { status, notes }
       );
@@ -178,17 +181,14 @@ router.put("/:id",
 // Elimina un appuntamento (solo il cliente che l'ha richiesto)
 router.delete("/:id",
   authMiddleware,
-  (req: Request, res: Response, next: express.NextFunction) => {
-    const validation = appointmentIdSchema.safeParse(req.params);
-    if (!validation.success) {
-      res.status(400).json({ errors: validation.error.issues });
-      return;
-    }
-    next();
-  },
   async (req: Request, res: Response) => {
     try {
-      const id = parseInt(req.params.id);
+        const deletePost = appointmentIdSchema.safeParse(req.params);
+        if (deletePost.error || !deletePost.data) {
+          res.status(400).json(deletePost.error);
+          return;
+        }
+      const id = deletePost.data.id;
 
       // Verifica che l'appuntamento esista
       const appointment = await appointmentsRepository.getAppointmentById(id);

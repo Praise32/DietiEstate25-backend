@@ -80,6 +80,7 @@ export const postsRelations = relations(posts, ({ one, many }) => ({
   }),
   photo: many(photos),
 }));
+
 const { createSelectSchema } = createSchemaFactory({
   coerce: true,
 });
