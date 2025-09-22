@@ -88,10 +88,25 @@ router.get("/", (async (req: Request, res: Response) => {
 }) as RequestHandler);
 
 
-router.post("/", passport.authenticate("jwt", { session: false }), validate({ body: apiPostInsertSchema }), async (req, res) => {
-  const PostInsert = await postsRepository.createPost({ ...req.body, userId: req.user!.id! });
-  res.status(201).json(PostInsert);
-});
+router.post("/", passport.authenticate("jwt", { session: false }), validate({ body: postInsertSchema }), async (req, res) => {
+  try {
+    const PostInsert = await postsRepository.createPost({ ...req.body, userId: req.user!.id! });
+    res.status(201).json(PostInsert);
+  } catch (error: any) {
+    console.error("Errore durante la creazione del post:", error);
+    
+    // Gestisci errori specifici del geocoding
+    if (error.message && error.message.includes('geocodificare')) {
+      res.status(400).json({ 
+        message: "Indirizzo non valido o non trovato. Verifica che via, città e CAP siano corretti.",
+        details: error.message 
+      });
+      return;
+    }
+    
+    res.status(500).json({ message: "Errore interno del server" });
+  }
+})
 
 router.delete("/:id", passport.authenticate("jwt", { session: false }), isOwnerMiddlewarePosts, async (req, res) => {
   const deletePost = postIdSchema.safeParse(req.params);

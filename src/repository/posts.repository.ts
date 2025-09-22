@@ -7,6 +7,7 @@ import type { ApiPostInsertSchema, PostInsertSchema, PostUpdateSchema, SearchFil
 import { db } from "@/db";
 import { photos } from "@/db/schema/photo";
 import { posts } from "@/db/schema/posts";
+import { geocodeAddress } from "@/utils/geocodingService";
 
 // Restituisce tutti i post con le relative foto (array)
 export async function getAllPostsWithPhotos() {
@@ -33,8 +34,30 @@ export async function getAllPostsWithPhotos() {
   return Array.from(postsMap.values());
 }
 
-export async function createPost(postBody: ApiPostInsertSchema) {
-  const { latitude, longitude, ...restOfBody } = postBody;
+export async function createPost(postBody: PostInsertSchema) {
+  let latitude = postBody.latitude;
+  let longitude = postBody.longitude;
+
+  // Se le coordinate non sono fornite, calcolale tramite geocoding
+  if (!latitude || !longitude) {
+    console.log(`Geocoding per: ${postBody.address}, ${postBody.city}, ${postBody.cap}`);
+    
+    const geocodeResult = await geocodeAddress(
+      postBody.address, 
+      postBody.city, 
+      postBody.cap.toString()
+    );
+
+    if (geocodeResult) {
+      latitude = geocodeResult.latitude;
+      longitude = geocodeResult.longitude;
+      console.log(`Coordinate trovate: ${latitude}, ${longitude}`);
+    } else {
+      throw new Error(`Impossibile geocodificare l'indirizzo: ${postBody.address}, ${postBody.city}, ${postBody.cap}`);
+    }
+  }
+
+  const { latitude: _, longitude: __, ...restOfBody } = postBody;
 
   const postDataWithLocation = {
     ...restOfBody,

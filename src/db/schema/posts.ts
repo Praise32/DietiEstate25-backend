@@ -112,6 +112,11 @@ export const postInsertSchema = createInsertSchema(posts, {
   updatedAt: true,
   createdAt: true,
   id: true,
+  location: true, // Rimuoviamo location perché sarà calcolata automaticamente
+}).extend({
+  // Le coordinate diventano opzionali - se non fornite, verranno calcolate
+  latitude: z.number().optional(),
+  longitude: z.number().optional(),
 });
 
 export const postUpdateSchema = createUpdateSchema(posts).omit({
