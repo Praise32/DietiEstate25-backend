@@ -107,6 +107,39 @@ router.post(
   },
 );
 
+router.get("/validate/:token", async (req, res) => {
+  const { token } = req.params;
+
+  try {
+    // Verifica se l'invito esiste nel database
+    const invite = await inviteRepository.getInviteByToken(token);
+
+    if (!invite || invite.used || new Date(invite.expiresAt) < new Date()) {
+      res.status(400).json({
+        valid: false,
+        message: "Invito non valido o scaduto",
+      });
+      return;
+    }
+
+    // Decodifica il token per ottenere le informazioni
+    const decoded = jwt.verify(token, env.JWT_SECRET_KEY) as any;
+
+    res.json({
+      valid: true,
+      email: decoded.email,
+      role: decoded.role,
+    });
+  }
+  catch (error) {
+    console.error("Errore nella validazione del token:", error);
+    res.status(400).json({
+      valid: false,
+      message: "Token non valido",
+    });
+  }
+});
+
 // Route per la registrazione tramite invito
 router.post("/register/:token", async (req, res) => {
   const { token } = req.params;
