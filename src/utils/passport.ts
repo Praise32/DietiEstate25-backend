@@ -1,18 +1,17 @@
 import bcrypt from "bcryptjs"; // Per confrontare le password
+import { eq } from "drizzle-orm";
 // config/passport.ts
 import passport from "passport";
-import { Strategy as GoogleStrategy } from 'passport-google-oauth20';
-
+import { Strategy as GoogleStrategy } from "passport-google-oauth20";
 import { ExtractJwt, Strategy as JwtStrategy } from "passport-jwt"; // Importa JwtStrategy e ExtractJwt
 import { Strategy as LocalStrategy } from "passport-local"; // Importa LocalStrategy
 
-import { roles, type UserIdSchema } from "@/db/schema/user"; // Assicurati di avere il tuo modello utente
+import type { UserIdSchema } from "@/db/schema/user"; // Assicurati di avere il tuo modello utente
 
+import { db } from "@/db";
+import { roles } from "@/db/schema/user";
 import env from "@/env";
 import * as userRepository from "@/repository/user.repository";
-import { db } from "@/db";
-import { eq } from "drizzle-orm";
-
 
 // Aggiungi la strategia Google
 passport.use(
@@ -41,7 +40,7 @@ passport.use(
             // Genera una password casuale sicura per gli account Google
             password: bcrypt.hashSync(Math.random().toString(36).slice(-8), 10),
             phone: "",
-            googleId: profile.id
+            googleId: profile.id,
           });
 
           if (!newUser) {
@@ -52,14 +51,13 @@ passport.use(
         }
 
         return done(null, user);
-      } catch (error) {
+      }
+      catch (error) {
         return done(error as Error, undefined);
       }
-    }
-  )
+    },
+  ),
 );
-
-
 
 // Configurazione della LocalStrategy (per login email/password)
 passport.use(
@@ -104,7 +102,7 @@ const jwtOptions = {
 };
 
 passport.use(
-  new JwtStrategy(jwtOptions, async (jwt_payload: UserIdSchema, done) => {
+  new JwtStrategy(jwtOptions, async (jwt_payload: any, done) => {
     try {
       // jwt_payload è l'oggetto decodificato dal token JWT
       // Dovrebbe contenere l'ID dell'utente (o qualsiasi cosa tu abbia messo nel payload durante la firma del token)
@@ -113,6 +111,16 @@ passport.use(
       if (!userId) {
         // Se l'ID non è nel payload, il token non è valido per il nostro scopo
         return done(null, false, { message: "Token non valido: ID utente mancante." });
+      }
+
+      if (jwt_payload.role) {
+        const user = {
+          id: jwt_payload.id,
+          name: jwt_payload.name,
+          email: jwt_payload.email,
+          role: jwt_payload.role,
+        };
+        return done(null, user);
       }
 
       const userFound = await userRepository.getUserById(userId);

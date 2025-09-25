@@ -1,11 +1,11 @@
 import { relations } from "drizzle-orm";
-import { 
-  integer, 
+import {
+  integer,
   pgEnum,
-  pgTable, 
-  serial, 
-  text, 
-  timestamp 
+  pgTable,
+  serial,
+  text,
+  timestamp,
 } from "drizzle-orm/pg-core";
 import { createInsertSchema, createSchemaFactory } from "drizzle-zod";
 import { z } from "zod";
@@ -15,9 +15,9 @@ import user from "./user";
 
 // Definizione dello stato dell'appuntamento
 export const appointmentStatusEnum = pgEnum("appointment_status", [
-  "pending", 
-  "confirmed", 
-  "rejected"
+  "pending",
+  "confirmed",
+  "rejected",
 ]);
 
 export const appointments = pgTable("appointments", {
@@ -85,17 +85,16 @@ export const appointmentApiSchema = appointmentInsertSchema.omit({
   status: true,
   createdAt: true,
   updatedAt: true,
-  id: true
+  id: true,
 }).refine(
-  data => {
+  (data) => {
     const requestedDate = new Date(data.requestedDate);
     const twoWeeksFromNow = new Date();
     twoWeeksFromNow.setDate(twoWeeksFromNow.getDate() + 14);
     return requestedDate <= twoWeeksFromNow;
   },
-  { message: "La data dell'appuntamento deve essere entro le prossime due settimane" }
+  { message: "La data dell'appuntamento deve essere entro le prossime due settimane" },
 );
-
 
 export type AppointmentApiSchema = z.infer<typeof appointmentApiSchema>;
 export type AppointmentInsertSchema = z.infer<typeof appointmentInsertSchema>;

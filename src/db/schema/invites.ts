@@ -1,6 +1,4 @@
-import { z } from "zod";
-
-import { relations, sql } from "drizzle-orm";
+import { relations } from "drizzle-orm";
 import {
   boolean,
   integer,
@@ -10,31 +8,32 @@ import {
   timestamp,
 } from "drizzle-orm/pg-core";
 import { createInsertSchema, createSchemaFactory, createUpdateSchema } from "drizzle-zod";
+import { z } from "zod";
 
 import user from "./user";
 
-export const invites = pgTable('invites', {
-  id: serial('id').primaryKey(),
-  email: text('email').notNull(),
-  role: text('role').notNull(),
-  token: text('token').notNull(),
-  invitedBy: integer('invited_by').references(() => user.id).notNull(),
-  expiresAt: timestamp('expires_at').notNull(),
-  used: boolean('used').notNull().default(false),
-  createdAt: timestamp('created_at').defaultNow(),
+export const invites = pgTable("invites", {
+  id: serial("id").primaryKey(),
+  email: text("email").notNull(),
+  role: text("role").notNull(),
+  token: text("token").notNull(),
+  invitedBy: integer("invited_by").references(() => user.id).notNull(),
+  expiresAt: timestamp("expires_at").notNull(),
+  used: boolean("used").notNull().default(false),
+  createdAt: timestamp("created_at").defaultNow(),
 });
 
 export const invitesRelations = relations(invites, ({ one }) => ({
   inviter: one(user, {
     fields: [invites.invitedBy],
     references: [user.id],
-    relationName: 'invites',
-    }),
+    relationName: "invites",
+  }),
 }));
 
 export const inviteSchema = z.object({
   email: z.string().email(),
-  role: z.enum(['agent', 'support', 'manager'])
+  role: z.enum(["agent", "support", "manager"]),
 });
 
 const { createSelectSchema } = createSchemaFactory({
@@ -42,12 +41,12 @@ const { createSelectSchema } = createSchemaFactory({
 });
 
 export const invitesIdSchema = createSelectSchema(invites).omit({
-    email: true,
-    
+  email: true,
+
 });
 
 export const invitesInsertSchema = createInsertSchema(invites, {
-  
+
 });
 
 export const invitesUpdateSchema = createUpdateSchema(invites).omit({

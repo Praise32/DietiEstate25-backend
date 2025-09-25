@@ -1,0 +1,1 @@
+ALTER TABLE "users" ADD COLUMN "has_created_agency" boolean DEFAULT false;

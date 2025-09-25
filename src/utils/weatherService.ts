@@ -1,7 +1,7 @@
 import axios from "axios";
 
 // Cache semplice in-memory per le previsioni meteo
-const weatherCache: Record<string, { data: WeatherForecast, timestamp: number }> = {};
+const weatherCache: Record<string, { data: WeatherForecast; timestamp: number }> = {};
 const CACHE_TTL = 3600000; // 1 ora in millisecondi
 
 /**
@@ -62,7 +62,7 @@ export async function getWeatherForecast(latitude: number, longitude: number, da
   const roundedLat = Math.round(latitude * 10000) / 10000;
   const roundedLon = Math.round(longitude * 10000) / 10000;
   const cacheKey = `${roundedLat},${roundedLon},${days}`;
-  
+
   // Controlla se abbiamo dati in cache non scaduti
   const cachedData = weatherCache[cacheKey];
   if (cachedData && Date.now() - cachedData.timestamp < CACHE_TTL) {
@@ -70,26 +70,27 @@ export async function getWeatherForecast(latitude: number, longitude: number, da
   }
 
   try {
-    const response = await axios.get('https://api.open-meteo.com/v1/forecast', {
+    const response = await axios.get("https://api.open-meteo.com/v1/forecast", {
       params: {
         latitude: roundedLat,
         longitude: roundedLon,
-        daily: 'weathercode,temperature_2m_max,temperature_2m_min,precipitation_probability_max',
-        timezone: 'Europe/Rome',
+        daily: "weathercode,temperature_2m_max,temperature_2m_min,precipitation_probability_max",
+        timezone: "Europe/Rome",
         forecast_days: Math.min(days, 16),
-      }
+      },
     });
-    
+
     // Salva in cache
     weatherCache[cacheKey] = {
       data: response.data,
-      timestamp: Date.now()
+      timestamp: Date.now(),
     };
-    
+
     return response.data;
-  } catch (error) {
-    console.error('Errore durante il recupero delle previsioni meteo:', error);
-    throw new Error('Impossibile ottenere le previsioni meteo');
+  }
+  catch (error) {
+    console.error("Errore durante il recupero delle previsioni meteo:", error);
+    throw new Error("Impossibile ottenere le previsioni meteo");
   }
 }
 
@@ -100,14 +101,14 @@ export function formatWeatherData(data: WeatherForecast) {
   const formattedData = data.daily.time.map((date, index) => ({
     date,
     weatherCode: data.daily.weathercode[index],
-    weatherDescription: weatherCodeMapping[data.daily.weathercode[index]] || 'Sconosciuto',
+    weatherDescription: weatherCodeMapping[data.daily.weathercode[index]] || "Sconosciuto",
     maxTemp: data.daily.temperature_2m_max[index],
     minTemp: data.daily.temperature_2m_min[index],
     precipitationProbability: data.daily.precipitation_probability_max[index],
     units: {
       temperature: data.daily_units.temperature_2m_max,
       precipitation: data.daily_units.precipitation_probability_max,
-    }
+    },
   }));
 
   return formattedData;

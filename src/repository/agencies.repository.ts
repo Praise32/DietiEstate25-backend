@@ -1,8 +1,9 @@
-import { and, desc, eq } from "drizzle-orm";
+import { desc, eq, sql } from "drizzle-orm";
+
+import type { AgenciesInsertSchema, AgenciesUpdateSchema } from "@/db/schema/agencies";
 
 import { db } from "@/db";
 import { agencies, user } from "@/db/schema";
-import type { AgenciesInsertSchema, AgenciesUpdateSchema } from "@/db/schema/agencies";
 
 // Recupera tutte le agenzie
 export async function getAllAgencies() {
@@ -16,7 +17,7 @@ export async function getAgencyById(id: number) {
 }
 
 // Crea una nuova agenzia
-export async function createAgency(agencyData:  AgenciesInsertSchema) {
+export async function createAgency(agencyData: AgenciesInsertSchema) {
   const [createdAgency] = await db.insert(agencies).values(agencyData).returning();
   return createdAgency;
 }
@@ -86,4 +87,61 @@ export async function removeAgentFromAgency(userId: number) {
     .where(eq(user.id, userId))
     .returning();
   return updatedUser;
+}
+
+// Crea una nuova agenzia e marca il manager come avente creato l'agenzia
+export async function createAgencyForManager(agencyData: AgenciesInsertSchema, managerId: number) {
+  return db.transaction(async (tx) => {
+    // Controlla se il manager ha già creato un'agenzia
+    const [manager] = await tx.select().from(user).where(eq(user.id, managerId));
+
+    if (!manager) {
+      throw new Error("Manager non trovato");
+    }
+
+    if (manager.hasCreatedAgency) {
+      throw new Error("Il manager ha già creato un'agenzia");
+    }
+
+    // Crea l'agenzia
+    const [createdAgency] = await tx.insert(agencies).values({
+      ...agencyData,
+      managerId,
+    }).returning();
+
+    // Aggiorna il manager: associa all'agenzia e marca come avente creato l'agenzia
+    await tx.update(user)
+      .set({
+        agencyId: createdAgency.id,
+        hasCreatedAgency: true,
+      })
+      .where(eq(user.id, managerId));
+
+    return createdAgency;
+  });
+}
+
+// Verifica se un manager può creare un'agenzia
+export async function canManagerCreateAgency(managerId: number) {
+  const [manager] = await db.select().from(user).where(eq(user.id, managerId));
+  return manager && !manager.hasCreatedAgency;
+}
+
+// Recupera l'agenzia di un manager
+export async function getAgencyByManagerId(managerId: number) {
+  const [agency] = await db.select().from(agencies).where(eq(agencies.managerId, managerId));
+  return agency;
+}
+
+// Recupera agenzia per agente ID
+export async function getAgencyByAgentId(agentId: number) {
+  const [result] = await db
+    .select({
+      agency: agencies,
+    })
+    .from(agencies)
+    .innerJoin(sql`agency_users`, sql`agencies.id = agency_users.agency_id`)
+    .where(sql`agency_users.user_id = ${agentId}`);
+
+  return result?.agency;
 }

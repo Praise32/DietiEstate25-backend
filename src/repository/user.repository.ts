@@ -1,7 +1,7 @@
-import { eq , or} from "drizzle-orm";
+import { eq, or } from "drizzle-orm";
 
 import { db } from "@/db";
-import { user, roles } from "@/db/schema";
+import { roles, user } from "@/db/schema";
 
 export async function getUserById(id: number) {
   const [userFound] = await db
@@ -12,8 +12,9 @@ export async function getUserById(id: number) {
       phone: user.phone,
       password: user.password,
       agencyId: user.agencyId,
+      hasCreatedAgency: user.hasCreatedAgency,
       roleId: user.roleId,
-      role: roles.name, // <-- nome del ruolo
+      role: roles.name,
       createdAt: user.createdAt,
       updatedAt: user.updatedAt,
     })
@@ -37,7 +38,9 @@ export async function getUserByIdentifier(identifier: string) {
       phone: user.phone,
       password: user.password,
       roleId: user.roleId,
-      role: roles.name, // <-- nome del ruolo
+      agencyId: user.agencyId,
+      hasCreatedAgency: user.hasCreatedAgency,
+      role: roles.name,
       createdAt: user.createdAt,
       updatedAt: user.updatedAt,
     })
@@ -47,8 +50,8 @@ export async function getUserByIdentifier(identifier: string) {
       or(
         eq(user.email, identifier),
         eq(user.name, identifier),
-        eq(user.phone, identifier)
-      )
+        eq(user.phone, identifier),
+      ),
     );
   return userFound;
 }
@@ -59,7 +62,9 @@ export async function createUser(userBody: {
   phone: string;
   password: string;
   roleId: number;
+  agencyId?: number;
   googleId?: string;
+  hasCreatedAgency?: boolean;
 }) {
   const [createdUser] = await db
     .insert(user)
@@ -70,6 +75,8 @@ export async function createUser(userBody: {
       email: user.email,
       phone: user.phone,
       roleId: user.roleId,
+      agencyId: user.agencyId,
+      hasCreatedAgency: user.hasCreatedAgency,
       createdAt: user.createdAt,
       updatedAt: user.updatedAt,
     });
@@ -99,7 +106,6 @@ export async function getAllUsersWithRoles() {
     .leftJoin(roles, eq(user.roleId, roles.id));
   return users;
 }
-
 
 export async function updatePassword(userId: number, newPassword: string) {
   await db.update(user).set({ password: newPassword }).where(eq(user.id, userId));

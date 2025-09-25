@@ -1,5 +1,5 @@
 import { relations } from "drizzle-orm";
-import { pgTable, serial, text, timestamp, integer} from "drizzle-orm/pg-core";
+import { boolean, integer, pgTable, serial, text, timestamp } from "drizzle-orm/pg-core";
 import { createInsertSchema, createSelectSchema } from "drizzle-zod";
 import { z } from "zod";
 
@@ -21,7 +21,8 @@ const user = pgTable("users", {
   updatedAt: timestamp("updated_at", { mode: "string" }).notNull().defaultNow(),
   roleId: serial("role_id").notNull().references(() => roles.id),
   agencyId: integer("agency_id"),
-  
+  hasCreatedAgency: boolean("has_created_agency").default(false), // Nuovo campo
+
 });
 
 export const userInserSchema = createInsertSchema(user, {
@@ -73,4 +74,3 @@ export const usersRelations = relations(user, ({ many }) => ({
 }));
 
 export default user;
-

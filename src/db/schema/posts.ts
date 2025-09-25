@@ -13,9 +13,9 @@ import {
 import { createInsertSchema, createSchemaFactory, createUpdateSchema } from "drizzle-zod";
 import { z } from "zod";
 
+import { agencies } from "./agencies";
 import { photos } from "./photo";
 import user from "./user";
-import { agencies } from "./agencies";
 
 // Definisci un tipo per la categoria dell'annuncio
 export const listingTypeEnum = pgEnum("listing_type", ["vendita", "affitto"]);

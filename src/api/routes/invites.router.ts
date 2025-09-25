@@ -5,6 +5,7 @@ import jwt from "jsonwebtoken";
 
 import { inviteSchema } from "@/db/schema/invites";
 import env from "@/env";
+import * as agenciesRepository from "@/repository/agencies.repository";
 import * as inviteRepository from "@/repository/invites.repository";
 import * as userRepository from "@/repository/user.repository";
 import { sendInviteEmail } from "@/utils/email";
@@ -18,7 +19,7 @@ const router = express.Router();
 router.post(
   "/create",
   authMiddleware,
-  requireRole("agent", "support", "manager", "admin"),
+  requireRole("support", "manager", "admin"), // Rimuovi "agent" dai ruoli autorizzati
   validate({ body: inviteSchema }),
   async (req, res) => {
     if (!req.user || !req.user.id) {
@@ -27,17 +28,54 @@ router.post(
     }
     const { email, role } = req.body;
 
-    // Verifica permessi basati sul ruolo
-    if (
-      (req.user?.role === "manager" && role !== "agent")
-      || (req.user?.role === "agent" && !["support", "manager"].includes(role))
-    ) {
-      res.status(403).json({ message: "Non autorizzato a creare questo tipo di account" });
+    // Nuova logica per i permessi basati sui requisiti
+    let isAuthorized = false;
+
+    switch (req.user.role) {
+      case "admin":
+        // Admin può invitare tutti i ruoli
+        isAuthorized = ["admin", "support", "manager", "agent", "customer"].includes(role);
+        break;
+
+      case "support":
+        // Support può invitare tutti tranne se stesso
+        isAuthorized = ["admin", "manager", "agent", "customer"].includes(role);
+        break;
+
+      case "manager":
+        // Manager può invitare solo agent
+        isAuthorized = role === "agent";
+        break;
+
+      case "agent":
+        // Agent non può invitare nessuno (già escluso dal requireRole)
+        isAuthorized = false;
+        break;
+
+      default:
+        isAuthorized = false;
+    }
+
+    if (!isAuthorized) {
+      res.status(403).json({
+        message: `Non autorizzato a creare inviti per il ruolo '${role}'`,
+      });
       return;
     }
 
+    // Se è un manager che invita un agente, aggiungi l'agencyId al token
+    let agencyId = null;
+    if (req.user.role === "manager" && role === "agent") {
+      const managerAgency = await agenciesRepository.getAgencyByManagerId(req.user.id);
+      if (!managerAgency) {
+        res.status(403).json({ message: "Devi prima creare un'agenzia prima di invitare agenti" });
+        return;
+      }
+      agencyId = managerAgency.id;
+    }
+
     const token = jwt.sign(
-      { email, role },
+      { email, role, agencyId },
       env.JWT_SECRET_KEY,
       { expiresIn: "24h" },
     );
@@ -86,6 +124,16 @@ router.post("/register/:token", async (req, res) => {
     res.status(400).json({ message: `Il ruolo '${invite.role}' non è valido.` });
     return;
   }
+
+  // Decodifica il token per ottenere l'agencyId se presente
+  let agencyId = null;
+  try {
+    const decoded = jwt.verify(token, env.JWT_SECRET_KEY) as any;
+    agencyId = decoded.agencyId || null;
+  }
+  catch (error) {
+    console.error("Errore nella decodifica del token:", error);
+  }
   // Crea nuovo utente
   const user = await userRepository.createUser({
     email: invite.email,
@@ -93,13 +141,19 @@ router.post("/register/:token", async (req, res) => {
     name,
     phone,
     roleId,
+    agencyId,
   });
 
   await inviteRepository.markInviteAsUsed(token);
 
   // Genera JWT per il nuovo utente
   const authToken = jwt.sign(
-    { id: user?.id, name: user?.name, email: user?.email },
+    {
+      id: user?.id,
+      name: user?.name,
+      email: user?.email,
+      role: user?.role,
+    },
     env.JWT_SECRET_KEY,
     { expiresIn: "24h" },
   );

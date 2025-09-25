@@ -1,6 +1,4 @@
-import  z from "zod";
-
-import { relations, sql} from "drizzle-orm";
+import { relations, sql } from "drizzle-orm";
 import {
   boolean,
   integer,
@@ -11,10 +9,11 @@ import {
   text,
   timestamp,
 } from "drizzle-orm/pg-core";
-import { createInsertSchema, createSchemaFactory , createUpdateSchema } from "drizzle-zod";
+import { createInsertSchema, createSchemaFactory, createUpdateSchema } from "drizzle-zod";
+import z from "zod";
 
-import user from "./user";
 import { posts } from "./posts";
+import user from "./user";
 
 export const agencies = pgTable("agencies", {
   id: serial("id").primaryKey(),
@@ -35,22 +34,21 @@ export const agencies = pgTable("agencies", {
   managerId: integer("manager_id").references(() => user.id),
 });
 
-
 export const agenciesRelations = relations(agencies, ({ one, many }) => ({
-    manager: one(user, {
+  manager: one(user, {
     fields: [agencies.managerId],
     references: [user.id],
-    relationName: 'agencies',
-     }),
+    relationName: "agencies",
+  }),
 
-       // Relazione con gli agenti dell'agenzia (via user.agencyId)
+  // Relazione con gli agenti dell'agenzia (via user.agencyId)
   agents: many(user),
   // Relazione con gli immobili dell'agenzia
-  properties: many(posts)
+  properties: many(posts),
 }));
 
 const { createSelectSchema } = createSchemaFactory({
-  coerce: true,  // <-- IMPORTANTE: Questa opzione converte automaticamente i tipi
+  coerce: true, // <-- IMPORTANTE: Questa opzione converte automaticamente i tipi
 });
 
 // Schema per l'ID dell'agenzia
@@ -68,7 +66,7 @@ export const agenciesIdSchema = createSelectSchema(agencies)
     createdAt: true,
     updatedAt: true,
     managerId: true,
-    
+
   });
 
 // Schema per l'inserimento di una nuova agenzia
@@ -110,4 +108,3 @@ export const agenciesUpdateSchema = createUpdateSchema(agencies)
 export type AgenciesInsertSchema = z.infer<typeof agenciesInsertSchema>;
 export type AgenciesUpdateSchema = z.infer<typeof agenciesUpdateSchema>;
 export type AgenciesIdSchema = z.infer<typeof agenciesIdSchema>;
-

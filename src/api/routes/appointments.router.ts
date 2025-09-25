@@ -1,15 +1,16 @@
+import type { Request, Response } from "express";
+
 import express from "express";
-import { type Request, type Response } from "express";
 import validate from "express-zod-safe";
 
 import { authMiddleware } from "@/api/middleware/auth.middleware";
 import { requireRole } from "@/api/middleware/role.middleware";
-import { getWeatherForecast, formatWeatherData } from "@/utils/weatherService";
-import { 
-    appointmentApiSchema,
+import {
+  appointmentApiSchema,
   appointmentIdSchema,
-  appointmentStatusUpdateSchema 
+  appointmentStatusUpdateSchema,
 } from "@/db/schema/appointments";
+import * as agenciesRepository from "@/repository/agencies.repository";
 import * as appointmentsRepository from "@/repository/appointments.repository";
 import * as postsRepository from "@/repository/posts.repository";
 import * as userRepository from "@/repository/user.repository";
@@ -19,303 +20,346 @@ import passport from "@/utils/passport";
 const router = express.Router();
 
 // Richiesta di una nuova visita
-router.post("/", 
-  authMiddleware,
-  validate({ body: appointmentApiSchema }), 
-  async (req: Request, res: Response) => {
-    try {
-      if (!req.user?.id) {
-        res.status(401).json({ message: "Utente non autenticato" });
-        return;
-      }
-
-      // Verifica che l'immobile esista
-      const post = await postsRepository.getPostById(req.body.postId);
-      if (!post) {
-        res.status(404).json({ message: "Immobile non trovato" });
-        return;
-      }
-
-      // Verifica che l'agente esista
-      const agent = await userRepository.getUserById(post.userId);
-      if (!agent) {
-        res.status(404).json({ message: "Agente non trovato" });
-        return;
-      }
-
-      // Crea l'appuntamento
-      const appointment = await appointmentsRepository.createAppointment({
-        ...req.body,
-        userId: req.user.id,
-        agentId: post.userId,
-      });
-
-      // Invia email di notifica all'agente
-      await sendAppointmentNotificationEmail(
-        agent.email ?? undefined,
-        req.user.name || "Cliente",
-        post.title,
-        new Date(req.body.requestedDate),
-        appointment.id
-      );
-
-      res.status(201).json({
-        message: "Richiesta di visita inviata con successo",
-        appointment,
-      });
-    } catch (error) {
-      console.error("Errore durante la creazione dell'appuntamento:", error);
-      res.status(500).json({ message: "Errore durante la richiesta di visita" });
+router.post("/", authMiddleware, validate({ body: appointmentApiSchema }), async (req: Request, res: Response) => {
+  try {
+    if (!req.user?.id) {
+      res.status(401).json({ message: "Utente non autenticato" });
+      return;
     }
+
+    // Verifica che l'immobile esista
+    const post = await postsRepository.getPostById(req.body.postId);
+    if (!post) {
+      res.status(404).json({ message: "Immobile non trovato" });
+      return;
+    }
+
+    // Verifica che l'agente esista
+    const agent = await userRepository.getUserById(post.userId);
+    if (!agent) {
+      res.status(404).json({ message: "Agente non trovato" });
+      return;
+    }
+
+    // Crea l'appuntamento
+    const appointment = await appointmentsRepository.createAppointment({
+      ...req.body,
+      userId: req.user.id,
+      agentId: post.userId,
+    });
+
+    // Invia email di notifica all'agente
+    await sendAppointmentNotificationEmail(
+      agent.email ?? undefined,
+      req.user.name || "Cliente",
+      post.title,
+      new Date(req.body.requestedDate),
+      appointment.id,
+    );
+
+    res.status(201).json({
+      message: "Richiesta di visita inviata con successo",
+      appointment,
+    });
   }
-);
+  catch (error) {
+    console.error("Errore durante la creazione dell'appuntamento:", error);
+    res.status(500).json({ message: "Errore durante la richiesta di visita" });
+  }
+});
 
 // Ottieni appuntamenti (differenziati per ruolo)
-router.get("/", 
-  authMiddleware, 
-  async (req: Request, res: Response) => {
-    try {
-      if (!req.user?.id) {
-        res.status(401).json({ message: "Utente non autenticato" });
-        return;
-      }
+router.get("/", authMiddleware, async (req: Request, res: Response) => {
+  try {
+    if (!req.user?.id) {
+      res.status(401).json({ message: "Utente non autenticato" });
+      return;
+    }
 
-      let appointments;
-      
-      // Se l'utente è un agente, visualizza gli appuntamenti per i suoi immobili
-      if (["agent", "admin", "manager"].includes(req.user.role || "")) {
+    let appointments: any[];
+
+    switch (req.user.role) {
+      case "admin":
+        // Admin vede tutti gli appuntamenti del sistema
+        appointments = await appointmentsRepository.getAllAppointments();
+        break;
+
+      case "manager": {
+        // Manager vede tutti gli appuntamenti della sua agenzia
+        const managerAgency = await agenciesRepository.getAgencyByManagerId(req.user.id);
+        if (managerAgency) {
+          appointments = await appointmentsRepository.getAppointmentsByAgencyId(managerAgency.id);
+        }
+        else {
+          appointments = [];
+        }
+        break;
+      }
+      case "agent":
+        // Agente vede solo i suoi appuntamenti
         appointments = await appointmentsRepository.getAppointmentsByAgentId(req.user.id);
-      } 
-      // Altrimenti mostra gli appuntamenti richiesti dall'utente
-      else {
+        break;
+
+      default:
+        // Cliente vede solo i suoi appuntamenti
         appointments = await appointmentsRepository.getAppointmentsByUserId(req.user.id);
-      }
-
-      res.status(200).json(appointments);
-    } catch (error) {
-      console.error("Errore durante il recupero degli appuntamenti:", error);
-      res.status(500).json({ message: "Errore durante il recupero degli appuntamenti" });
+        break;
     }
+
+    res.status(200).json(appointments);
   }
-);
+  catch (error) {
+    console.error("Errore durante il recupero degli appuntamenti:", error);
+    res.status(500).json({ message: "Errore durante il recupero degli appuntamenti" });
+  }
+});
 
-// Conferma o rifiuta un appuntamento (solo agenti)
-router.put("/:id",
-  passport.authenticate("jwt", { session: false }),
-  requireRole("agent", "admin", "manager"),
-  async (req: Request, res: Response) => {
-    try {
-        const putID = appointmentIdSchema.safeParse(req.params);
-        if (putID.error || !putID.data) {
-          res.status(400).json(putID.error);
-          return;
-        }
-      
-        const putBody = appointmentStatusUpdateSchema.safeParse(req.body);
-        if (putBody.error || !putBody.data) {
-          res.status(400).json(putBody.error);
-          return;
-        }
-      
-      const { status, notes } = req.body;
+// Conferma o rifiuta un appuntamento (agenti, manager, admin)
+router.put("/:id", passport.authenticate("jwt", { session: false }), requireRole("agent", "admin", "manager"), async (req: Request, res: Response) => {
+  try {
+    const putID = appointmentIdSchema.safeParse(req.params);
+    if (putID.error || !putID.data) {
+      res.status(400).json(putID.error);
+      return;
+    }
 
-      // Verifica che l'appuntamento esista
-      const appointment = await appointmentsRepository.getAppointmentById(putID.data.id);
-      if (!appointment) {
-        res.status(404).json({ message: "Appuntamento non trovato" });
-        return;
+    const putBody = appointmentStatusUpdateSchema.safeParse(req.body);
+    if (putBody.error || !putBody.data) {
+      res.status(400).json(putBody.error);
+      return;
+    }
+
+    const { status, notes } = req.body;
+
+    // Verifica che l'appuntamento esista
+    const appointment = await appointmentsRepository.getAppointmentById(putID.data.id);
+    if (!appointment) {
+      res.status(404).json({ message: "Appuntamento non trovato" });
+      return;
+    }
+
+    // Controllo autorizzazioni in base al ruolo
+    let isAuthorized = false;
+
+    if (req.user!.role === "admin") {
+      // Admin può modificare tutti gli appuntamenti
+      isAuthorized = true;
+    }
+    else if (req.user!.role === "manager") {
+      // Manager può modificare appuntamenti della sua agenzia
+      const agent = await userRepository.getUserById(appointment.agentId);
+      if (agent && req.user!.id) {
+        const agentAgency = await agenciesRepository.getAgencyByAgentId(agent.id);
+        const managerAgency = await agenciesRepository.getAgencyByManagerId(req.user!.id);
+        isAuthorized = agentAgency?.id === managerAgency?.id;
       }
+    }
+    else if (req.user!.role === "agent") {
+      // Agente può modificare solo i suoi appuntamenti
+      isAuthorized = appointment.agentId === req.user!.id;
+    }
 
-      // Verifica che l'agente sia autorizzato
-      if (appointment.agentId !== req.user!.id) {
-        res.status(403).json({ message: "Non sei autorizzato a modificare questo appuntamento" });
-        return;
-      }
+    if (!isAuthorized) {
+      res.status(403).json({ message: "Non sei autorizzato a modificare questo appuntamento" });
+      return;
+    }
 
-      // Aggiorna lo stato dell'appuntamento
-      const updated = await appointmentsRepository.updateAppointmentStatus(
-        Number(putID.data.id),
-        req.user!.id,
-        { status, notes }
+    if (!req.user?.id) {
+      res.status(401).json({ message: "Utente non autenticato" });
+      return;
+    }
+
+    // Aggiorna lo stato dell'appuntamento
+    const updated = await appointmentsRepository.updateAppointmentStatus(
+      Number(putID.data.id),
+      req.user.id,
+      { status, notes },
+    );
+
+    // Recupera informazioni per l'email
+    const user = await userRepository.getUserById(appointment.userId);
+    const post = await postsRepository.getPostById(appointment.postId);
+
+    if (!user || !post) {
+      res.status(404).json({ message: "Utente o immobile non trovato" });
+      return;
+    }
+
+    // Invia email di conferma o rifiuto al cliente
+    if (status === "confirmed") {
+      await sendAppointmentConfirmationEmail(
+        user.email ?? undefined,
+        post.title,
+        new Date(appointment.requestedDate),
+        notes || "",
       );
-
-      // Recupera informazioni per l'email
-      const user = await userRepository.getUserById(appointment.userId);
-      const post = await postsRepository.getPostById(appointment.postId);
-
-      if (!user || !post) {
-        res.status(404).json({ message: "Utente o immobile non trovato" });
-        return;
-      }
-
-      // Invia email di conferma o rifiuto al cliente
-      if (status === "confirmed") {
-        await sendAppointmentConfirmationEmail(
-          user.email ?? undefined,
-          post.title,
-          new Date(appointment.requestedDate),
-          notes || ""
-        );
-      } else if (status === "rejected") {
-        await sendAppointmentRejectionEmail(
-          user.email ?? undefined,
-          post.title,
-          new Date(appointment.requestedDate),
-          notes || ""
-        );
-      }
-
-      res.status(200).json({
-        message: status === "confirmed" 
-          ? "Appuntamento confermato con successo" 
-          : "Appuntamento rifiutato",
-        appointment: updated
-      });
-    } catch (error) {
-      console.error("Errore durante l'aggiornamento dell'appuntamento:", error);
-      res.status(500).json({ message: "Errore durante l'aggiornamento dell'appuntamento" });
     }
-  }
-);
-
-// Elimina un appuntamento (solo il cliente che l'ha richiesto)
-router.delete("/:id",
-  authMiddleware,
-  async (req: Request, res: Response) => {
-    try {
-        const deletePost = appointmentIdSchema.safeParse(req.params);
-        if (deletePost.error || !deletePost.data) {
-          res.status(400).json(deletePost.error);
-          return;
-        }
-      const id = deletePost.data.id;
-
-      // Verifica che l'appuntamento esista
-      const appointment = await appointmentsRepository.getAppointmentById(id);
-      if (!appointment) {
-        res.status(404).json({ message: "Appuntamento non trovato" });
-        return;
-      }
-
-      // Verifica che l'utente sia autorizzato (solo il cliente che ha richiesto la visita)
-      if (appointment.userId !== req.user!.id) {
-        res.status(403).json({ message: "Non sei autorizzato a eliminare questo appuntamento" });
-        return;
-      }
-
-      // Elimina l'appuntamento
-      await appointmentsRepository.deleteAppointment(Number(id), req.user!.id);
-
-      res.status(200).json({ message: "Appuntamento cancellato con successo" });
-    } catch (error) {
-      console.error("Errore durante l'eliminazione dell'appuntamento:", error);
-      res.status(500).json({ message: "Errore durante l'eliminazione dell'appuntamento" });
+    else if (status === "rejected") {
+      await sendAppointmentRejectionEmail(
+        user.email ?? undefined,
+        post.title,
+        new Date(appointment.requestedDate),
+        notes || "",
+      );
     }
+
+    res.status(200).json({
+      message: status === "confirmed"
+        ? "Appuntamento confermato con successo"
+        : "Appuntamento rifiutato",
+      appointment: updated,
+    });
   }
-);
+  catch (error) {
+    console.error("Errore durante l'aggiornamento dell'appuntamento:", error);
+    res.status(500).json({ message: "Errore durante l'aggiornamento dell'appuntamento" });
+  }
+});
+
+// Elimina un appuntamento
+router.delete("/:id", authMiddleware, async (req: Request, res: Response) => {
+  try {
+    const deletePost = appointmentIdSchema.safeParse(req.params);
+    if (deletePost.error || !deletePost.data) {
+      res.status(400).json(deletePost.error);
+      return;
+    }
+    const id = deletePost.data.id;
+
+    // Verifica che l'appuntamento esista
+    const appointment = await appointmentsRepository.getAppointmentById(id);
+    if (!appointment) {
+      res.status(404).json({ message: "Appuntamento non trovato" });
+      return;
+    }
+
+    // Controllo autorizzazioni in base al ruolo
+    let isAuthorized = false;
+
+    if (req.user!.role === "admin") {
+      // Admin può eliminare tutti gli appuntamenti
+      isAuthorized = true;
+    }
+    else if (req.user!.role === "manager") {
+      // Manager può eliminare appuntamenti della sua agenzia
+      const agent = await userRepository.getUserById(appointment.agentId);
+      if (agent && req.user!.id) {
+        const agentAgency = await agenciesRepository.getAgencyByAgentId(agent.id);
+        const managerAgency = await agenciesRepository.getAgencyByManagerId(req.user!.id);
+        isAuthorized = agentAgency?.id === managerAgency?.id;
+      }
+    }
+    else if (appointment.userId === req.user!.id) {
+      // Il cliente può eliminare i suoi appuntamenti
+      isAuthorized = true;
+    }
+
+    if (!isAuthorized) {
+      res.status(403).json({ message: "Non sei autorizzato a eliminare questo appuntamento" });
+      return;
+    }
+
+    // Elimina l'appuntamento
+    if (!req.user?.id) {
+      res.status(401).json({ message: "Utente non autenticato" });
+      return;
+    }
+    await appointmentsRepository.deleteAppointment(Number(id), req.user!.id);
+
+    res.status(200).json({ message: "Appuntamento cancellato con successo" });
+  }
+  catch (error) {
+    console.error("Errore durante l'eliminazione dell'appuntamento:", error);
+    res.status(500).json({ message: "Errore durante l'eliminazione dell'appuntamento" });
+  }
+});
 
 // Ottieni appuntamenti in formato calendario
-router.get("/calendar", 
-  authMiddleware, 
-  async (req: Request, res: Response) => {
-    try {
-      if (!req.user?.id) {
-        res.status(401).json({ message: "Utente non autenticato" });
-        return;
+router.get("/calendar", authMiddleware, async (req: Request, res: Response) => {
+  try {
+    if (!req.user?.id) {
+      res.status(401).json({ message: "Utente non autenticato" });
+      return;
+    }
+
+    // Parametri di query per il periodo (opzionali)
+    const start = req.query.start ? new Date(req.query.start as string) : undefined;
+    const end = req.query.end ? new Date(req.query.end as string) : undefined;
+
+    let appointments: any[];
+
+    switch (req.user.role) {
+      case "admin":
+        // Admin vede tutti gli appuntamenti del sistema
+        appointments = await appointmentsRepository.getAllAppointmentsForCalendar(start, end);
+        break;
+
+      case "manager": {
+        // Manager vede tutti gli appuntamenti della sua agenzia
+        const managerAgency = await agenciesRepository.getAgencyByManagerId(req.user.id);
+        if (managerAgency) {
+          appointments = await appointmentsRepository.getAppointmentsByAgencyIdForCalendar(managerAgency.id, start, end);
+        }
+        else {
+          appointments = [];
+        }
+        break;
       }
 
-      // Parametri di query per il periodo (opzionali)
-      const start = req.query.start ? new Date(req.query.start as string) : undefined;
-      const end = req.query.end ? new Date(req.query.end as string) : undefined;
-
-      let appointments;
-      
-      // Se l'utente è un agente, visualizza gli appuntamenti per i suoi immobili
-      if (["agent", "admin", "manager"].includes(req.user.role || "")) {
+      case "agent":
+        // Agente vede solo i suoi appuntamenti
         appointments = await appointmentsRepository.getAppointmentsByAgentIdForCalendar(
           req.user.id,
           start,
-          end
+          end,
         );
-      } 
-      // Altrimenti mostra gli appuntamenti richiesti dall'utente
-      else {
+        break;
+
+      default:
+        // Cliente vede solo i suoi appuntamenti
         appointments = await appointmentsRepository.getAppointmentsByUserIdForCalendar(
           req.user.id,
           start,
-          end
+          end,
         );
-      }
-
-      // Converti gli appuntamenti in formato compatibile con i calendari
-      const calendarEvents = appointments.map(app => ({
-        id: app.id.toString(),
-        title: app.postTitle || "Visita immobile",
-        start: app.requestedDate,
-        end: new Date(new Date(app.requestedDate).getTime() + 60 * 60 * 1000), // 1 ora di default
-        allDay: false,
-        extendedProps: {
-          status: app.status,
-          postId: app.postId,
-          address: app.address,
-          clientName: app.clientName,
-          agentName: app.agentName,
-          notes: app.notes
-        },
-        backgroundColor: getStatusColor(app.status),
-        borderColor: getStatusColor(app.status),
-      }));
-
-      res.json(calendarEvents);
-    } catch (error) {
-      console.error("Errore durante il recupero degli appuntamenti:", error);
-      res.status(500).json({ message: "Errore interno del server" });
+        break;
     }
+
+    // Converti gli appuntamenti in formato compatibile con i calendari
+    const calendarEvents = appointments.map(app => ({
+      id: app.id.toString(),
+      title: app.postTitle || "Visita immobile",
+      start: app.requestedDate,
+      end: new Date(new Date(app.requestedDate).getTime() + 60 * 60 * 1000), // 1 ora di default
+      allDay: false,
+      extendedProps: {
+        status: app.status,
+        postId: app.postId,
+        address: app.address,
+        clientName: app.clientName,
+        agentName: app.agentName,
+        notes: app.notes,
+      },
+      backgroundColor: getStatusColor(app.status),
+      borderColor: getStatusColor(app.status),
+    }));
+
+    res.json(calendarEvents);
   }
-);
+  catch (error) {
+    console.error("Errore durante il recupero degli appuntamenti:", error);
+    res.status(500).json({ message: "Errore interno del server" });
+  }
+});
 
 // Funzione helper per determinare il colore in base allo stato
 function getStatusColor(status: string): string {
   switch (status) {
-    case 'confirmed': return '#4CAF50'; // verde
-    case 'rejected': return '#F44336'; // rosso
-    case 'pending': return '#FFC107'; // giallo
-    default: return '#2196F3'; // blu
+    case "confirmed": return "#4CAF50"; // verde
+    case "rejected": return "#F44336"; // rosso
+    case "pending": return "#FFC107"; // giallo
+    default: return "#2196F3"; // blu
   }
 }
-
-
-// Ottieni previsioni meteo per un immobile
-router.get("/weather/:postId", 
-  authMiddleware,
-  async (req: Request, res: Response) => {
-    try {
-      const postId = parseInt(req.params.postId);
-      
-      // Verifica che l'immobile esista
-      const post = await postsRepository.getPostById(postId);
-      if (!post) {
-        res.status(404).json({ message: "Immobile non trovato" });
-        return;
-      }
-      
-      // Estrai coordinate dall'immobile
-      // Siccome i dati geografici sono salvati in formato PostGIS, dobbiamo estrarre lat e lon
-      const latitude = post.location.lat;
-      const longitude = post.location.lon;
-      
-      // Ottieni previsioni per i prossimi 14 giorni (per la pianificazione delle visite)
-      const forecast = await getWeatherForecast(latitude, longitude, 14);
-      
-      // Formatta i dati per un uso più semplice dal frontend
-      const formattedForecast = formatWeatherData(forecast);
-      
-      res.status(200).json(formattedForecast);
-    } catch (error) {
-      console.error("Errore durante il recupero delle previsioni meteo:", error);
-      res.status(500).json({ message: "Errore durante il recupero delle previsioni meteo" });
-    }
-  }
-);
 
 export default router;
