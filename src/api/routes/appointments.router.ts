@@ -80,12 +80,13 @@ router.get("/", authMiddleware, async (req: Request, res: Response) => {
 
     switch (req.user.role) {
       case "admin":
-        // Admin vede tutti gli appuntamenti del sistema
+      case "support":
+        // Admin e Support vedono tutti gli appuntamenti del sistema con dati agente completi
         appointments = await appointmentsRepository.getAllAppointments();
         break;
 
       case "manager": {
-        // Manager vede tutti gli appuntamenti della sua agenzia
+        // Manager vede tutti gli appuntamenti della sua agenzia con dati agente completi
         const managerAgency = await agenciesRepository.getAgencyByManagerId(req.user.id);
         if (managerAgency) {
           appointments = await appointmentsRepository.getAppointmentsByAgencyId(managerAgency.id);
@@ -95,6 +96,7 @@ router.get("/", authMiddleware, async (req: Request, res: Response) => {
         }
         break;
       }
+
       case "agent":
         // Agente vede solo i suoi appuntamenti
         appointments = await appointmentsRepository.getAppointmentsByAgentId(req.user.id);
@@ -114,8 +116,7 @@ router.get("/", authMiddleware, async (req: Request, res: Response) => {
   }
 });
 
-// Conferma o rifiuta un appuntamento (agenti, manager, admin)
-router.put("/:id", passport.authenticate("jwt", { session: false }), requireRole("agent", "admin", "manager"), async (req: Request, res: Response) => {
+router.put("/:id", passport.authenticate("jwt", { session: false }), requireRole("agent", "admin", "manager", "support"), async (req: Request, res: Response) => {
   try {
     const putID = appointmentIdSchema.safeParse(req.params);
     if (putID.error || !putID.data) {
@@ -141,16 +142,16 @@ router.put("/:id", passport.authenticate("jwt", { session: false }), requireRole
     // Controllo autorizzazioni in base al ruolo
     let isAuthorized = false;
 
-    if (req.user!.role === "admin") {
-      // Admin può modificare tutti gli appuntamenti
+    if (req.user!.role === "admin" || req.user!.role === "support") {
+      // Admin e Support possono modificare tutti gli appuntamenti
       isAuthorized = true;
     }
     else if (req.user!.role === "manager") {
       // Manager può modificare appuntamenti della sua agenzia
       const agent = await userRepository.getUserById(appointment.agentId);
-      if (agent && req.user!.id) {
+      if (agent) {
         const agentAgency = await agenciesRepository.getAgencyByAgentId(agent.id);
-        const managerAgency = await agenciesRepository.getAgencyByManagerId(req.user!.id);
+        const managerAgency = await agenciesRepository.getAgencyByManagerId(req.user!.id!);
         isAuthorized = agentAgency?.id === managerAgency?.id;
       }
     }
@@ -169,11 +170,12 @@ router.put("/:id", passport.authenticate("jwt", { session: false }), requireRole
       return;
     }
 
-    // Aggiorna lo stato dell'appuntamento
+    // Aggiorna lo stato dell'appuntamento (passa anche il ruolo)
     const updated = await appointmentsRepository.updateAppointmentStatus(
       Number(putID.data.id),
       req.user.id,
       { status, notes },
+      req.user.role!, // Passa il ruolo per la logica nel repository
     );
 
     // Recupera informazioni per l'email
@@ -236,8 +238,8 @@ router.delete("/:id", authMiddleware, async (req: Request, res: Response) => {
     // Controllo autorizzazioni in base al ruolo
     let isAuthorized = false;
 
-    if (req.user!.role === "admin") {
-      // Admin può eliminare tutti gli appuntamenti
+    if (req.user!.role === "admin" || req.user!.role === "support") {
+      // Admin e Support possono eliminare tutti gli appuntamenti
       isAuthorized = true;
     }
     else if (req.user!.role === "manager") {
@@ -259,12 +261,13 @@ router.delete("/:id", authMiddleware, async (req: Request, res: Response) => {
       return;
     }
 
-    // Elimina l'appuntamento
     if (!req.user?.id) {
       res.status(401).json({ message: "Utente non autenticato" });
       return;
     }
-    await appointmentsRepository.deleteAppointment(Number(id), req.user!.id);
+
+    // Elimina l'appuntamento (passa anche il ruolo)
+    await appointmentsRepository.deleteAppointment(Number(id), req.user!.id, req.user!.role!);
 
     res.status(200).json({ message: "Appuntamento cancellato con successo" });
   }
@@ -290,7 +293,8 @@ router.get("/calendar", authMiddleware, async (req: Request, res: Response) => {
 
     switch (req.user.role) {
       case "admin":
-        // Admin vede tutti gli appuntamenti del sistema
+      case "support":
+        // Admin e Support vedono tutti gli appuntamenti del sistema
         appointments = await appointmentsRepository.getAllAppointmentsForCalendar(start, end);
         break;
 
@@ -338,6 +342,8 @@ router.get("/calendar", authMiddleware, async (req: Request, res: Response) => {
         address: app.address,
         clientName: app.clientName,
         agentName: app.agentName,
+        agentEmail: app.agentEmail, // Aggiungi email agente
+        agentPhone: app.agentPhone, // Aggiungi telefono agente
         notes: app.notes,
       },
       backgroundColor: getStatusColor(app.status),
@@ -351,7 +357,6 @@ router.get("/calendar", authMiddleware, async (req: Request, res: Response) => {
     res.status(500).json({ message: "Errore interno del server" });
   }
 });
-
 // Funzione helper per determinare il colore in base allo stato
 function getStatusColor(status: string): string {
   switch (status) {

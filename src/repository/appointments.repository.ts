@@ -7,7 +7,7 @@ import { appointments } from "@/db/schema/appointments";
 import { posts } from "@/db/schema/posts";
 import user from "@/db/schema/user";
 
-// Recupero di tutti gli appuntamenti (solo per admin)
+// Recupero di tutti gli appuntamenti (per admin e support) - AGGIORNATO
 export async function getAllAppointments() {
   const result = await db
     .select({
@@ -24,7 +24,15 @@ export async function getAllAppointments() {
         email: user.email,
         phone: user.phone,
       },
-      agent: sql`(SELECT name FROM users WHERE id = ${appointments.agentId})`.as("agent_name"),
+      // Aggiungi i dati completi dell'agente con una subquery
+      agent: sql`(
+        SELECT json_build_object(
+          'id', id,
+          'name', name,
+          'email', email,
+          'phone', phone
+        ) FROM users WHERE id = ${appointments.agentId}
+      )`.as("agent"),
     })
     .from(appointments)
     .innerJoin(posts, eq(appointments.postId, posts.id))
@@ -34,7 +42,7 @@ export async function getAllAppointments() {
   return result;
 }
 
-// Recupero appuntamenti per agenzia (per manager)
+// Recupero appuntamenti per agenzia (per manager) - AGGIORNATO
 export async function getAppointmentsByAgencyId(agencyId: number) {
   // Prima recuperiamo tutti gli agenti dell'agenzia
   const agentIds = await db
@@ -63,7 +71,15 @@ export async function getAppointmentsByAgencyId(agencyId: number) {
         email: user.email,
         phone: user.phone,
       },
-      agent: sql`(SELECT name FROM users WHERE id = ${appointments.agentId})`.as("agent_name"),
+      // Aggiungi i dati completi dell'agente con una subquery
+      agent: sql`(
+        SELECT json_build_object(
+          'id', id,
+          'name', name,
+          'email', email,
+          'phone', phone
+        ) FROM users WHERE id = ${appointments.agentId}
+      )`.as("agent"),
     })
     .from(appointments)
     .where(inArray(appointments.agentId, agentIds.map(a => a.id)))
@@ -74,7 +90,7 @@ export async function getAppointmentsByAgencyId(agencyId: number) {
   return result;
 }
 
-// Recupero tutti gli appuntamenti in formato calendario (per admin)
+// Recupero tutti gli appuntamenti in formato calendario (per admin e support) - AGGIORNATO
 export async function getAllAppointmentsForCalendar(start?: Date, end?: Date) {
   const conditions = [];
 
@@ -97,6 +113,8 @@ export async function getAllAppointmentsForCalendar(start?: Date, end?: Date) {
       address: posts.address,
       clientName: sql`(SELECT name FROM users WHERE id = ${appointments.userId})`.as("client_name"),
       agentName: sql`(SELECT name FROM users WHERE id = ${appointments.agentId})`.as("agent_name"),
+      agentEmail: sql`(SELECT email FROM users WHERE id = ${appointments.agentId})`.as("agent_email"),
+      agentPhone: sql`(SELECT phone FROM users WHERE id = ${appointments.agentId})`.as("agent_phone"),
     })
     .from(appointments)
     .innerJoin(posts, eq(appointments.postId, posts.id))
@@ -104,7 +122,7 @@ export async function getAllAppointmentsForCalendar(start?: Date, end?: Date) {
     .orderBy(appointments.requestedDate);
 }
 
-// Recupero appuntamenti per agenzia in formato calendario (per manager)
+// Recupero appuntamenti per agenzia in formato calendario (per manager) - AGGIORNATO
 export async function getAppointmentsByAgencyIdForCalendar(
   agencyId: number,
   start?: Date,
@@ -143,6 +161,8 @@ export async function getAppointmentsByAgencyIdForCalendar(
       address: posts.address,
       clientName: sql`(SELECT name FROM users WHERE id = ${appointments.userId})`.as("client_name"),
       agentName: sql`(SELECT name FROM users WHERE id = ${appointments.agentId})`.as("agent_name"),
+      agentEmail: sql`(SELECT email FROM users WHERE id = ${appointments.agentId})`.as("agent_email"),
+      agentPhone: sql`(SELECT phone FROM users WHERE id = ${appointments.agentId})`.as("agent_phone"),
     })
     .from(appointments)
     .innerJoin(posts, eq(appointments.postId, posts.id))
@@ -234,9 +254,18 @@ export async function getAppointmentsByPostId(postId: number) {
 // Aggiornamento dello stato di un appuntamento
 export async function updateAppointmentStatus(
   id: number,
-  agentId: number,
+  userId: number,
   data: AppointmentStatusUpdateSchema,
+  userRole: string,
 ) {
+  // Per gli agenti, verifica che sia il loro appuntamento
+  // Per admin, support e manager, la verifica è già stata fatta nel router
+  const conditions = [eq(appointments.id, id)];
+
+  if (userRole === "agent") {
+    conditions.push(eq(appointments.agentId, userId));
+  }
+
   const [updated] = await db
     .update(appointments)
     .set({
@@ -244,23 +273,25 @@ export async function updateAppointmentStatus(
       notes: data.notes,
       updatedAt: new Date(),
     })
-    .where(and(
-      eq(appointments.id, id),
-      eq(appointments.agentId, agentId),
-    ))
+    .where(and(...conditions))
     .returning();
 
   return updated;
 }
 
 // Eliminazione di un appuntamento
-export async function deleteAppointment(id: number, userId: number) {
+export async function deleteAppointment(id: number, userId: number, userRole: string) {
+  // Per i clienti, verifica che sia il loro appuntamento
+  // Per admin e manager, la verifica è già stata fatta nel router
+  const conditions = [eq(appointments.id, id)];
+
+  if (userRole === "customer") {
+    conditions.push(eq(appointments.userId, userId));
+  }
+
   const [deleted] = await db
     .delete(appointments)
-    .where(and(
-      eq(appointments.id, id),
-      eq(appointments.userId, userId),
-    ))
+    .where(and(...conditions))
     .returning();
 
   return deleted;
