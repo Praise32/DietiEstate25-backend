@@ -10,6 +10,7 @@ import {
 import { createInsertSchema, createSchemaFactory, createUpdateSchema } from "drizzle-zod";
 import { z } from "zod";
 
+import { agencies } from "./agencies";
 import user from "./user";
 
 export const invites = pgTable("invites", {
@@ -21,6 +22,7 @@ export const invites = pgTable("invites", {
   expiresAt: timestamp("expires_at").notNull(),
   used: boolean("used").notNull().default(false),
   createdAt: timestamp("created_at").defaultNow(),
+  agencyId: integer("agency_id").references(() => agencies.id),
 });
 
 export const invitesRelations = relations(invites, ({ one }) => ({
@@ -29,11 +31,17 @@ export const invitesRelations = relations(invites, ({ one }) => ({
     references: [user.id],
     relationName: "invites",
   }),
+  agency: one(agencies, {
+    fields: [invites.agencyId],
+    references: [agencies.id],
+    relationName: "invites_agency",
+  }),
 }));
 
 export const inviteSchema = z.object({
   email: z.string().email(),
   role: z.enum(["agent", "support", "manager"]),
+  agencyId: z.number().optional(),
 });
 
 const { createSelectSchema } = createSchemaFactory({

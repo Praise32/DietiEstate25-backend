@@ -1,0 +1,1 @@
+ALTER TABLE "invites" ALTER COLUMN "agency_id" DROP NOT NULL;

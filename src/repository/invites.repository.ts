@@ -9,6 +9,7 @@ export async function createInvite(data: {
   token: string;
   invitedBy: number;
   expiresAt: Date;
+  agencyId?: number;
 }) {
   const [invite] = await db.insert(invites).values(data).returning();
   return invite;

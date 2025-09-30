@@ -19,14 +19,14 @@ const router = express.Router();
 router.post(
   "/create",
   authMiddleware,
-  requireRole("support", "manager", "admin"), // Rimuovi "agent" dai ruoli autorizzati
+  requireRole("support", "manager", "admin"),
   validate({ body: inviteSchema }),
   async (req, res) => {
     if (!req.user || !req.user.id) {
       res.status(401).json({ message: "Utente non autenticato o ID utente non trovato." });
       return;
     }
-    const { email, role } = req.body;
+    const { email, role, agencyId } = req.body;
 
     // Nuova logica per i permessi basati sui requisiti
     let isAuthorized = false;
@@ -63,19 +63,46 @@ router.post(
       return;
     }
 
-    // Se è un manager che invita un agente, aggiungi l'agencyId al token
-    let agencyId = null;
-    if (req.user.role === "manager" && role === "agent") {
-      const managerAgency = await agenciesRepository.getAgencyByManagerId(req.user.id);
-      if (!managerAgency) {
-        res.status(403).json({ message: "Devi prima creare un'agenzia prima di invitare agenti" });
-        return;
+    // Gestione speciale per gli agenti
+    let finalAgencyId = null;
+
+    if (role === "agent") {
+      if (req.user.role === "manager") {
+        // Manager può invitare agenti solo nella sua agenzia
+        const managerAgency = await agenciesRepository.getAgencyByManagerId(req.user.id);
+        if (!managerAgency) {
+          res.status(403).json({ message: "Devi prima creare un'agenzia prima di invitare agenti" });
+          return;
+        }
+        finalAgencyId = managerAgency.id;
       }
-      agencyId = managerAgency.id;
+      else if (req.user.role === "admin" || req.user.role === "support") {
+        // Admin e Support devono specificare un'agenzia quando invitano agenti
+        if (!agencyId) {
+          res.status(400).json({ message: "È necessario specificare un'agenzia quando si invita un agente" });
+          return;
+        }
+
+        // Verifica che esistano agenzie nel sistema
+        const allAgencies = await agenciesRepository.getAllAgencies();
+        if (allAgencies.length === 0) {
+          res.status(400).json({ message: "Impossibile invitare agenti: non esistono agenzie nel sistema. Creare prima un'agenzia." });
+          return;
+        }
+
+        // Verifica che l'agenzia specificata esista
+        const agency = await agenciesRepository.getAgencyById(agencyId);
+        if (!agency) {
+          res.status(404).json({ message: "L'agenzia specificata non esiste" });
+          return;
+        }
+
+        finalAgencyId = agencyId;
+      }
     }
 
     const token = jwt.sign(
-      { email, role, agencyId },
+      { email, role, agencyId: finalAgencyId },
       env.JWT_SECRET_KEY,
       { expiresIn: "24h" },
     );
@@ -106,6 +133,27 @@ router.post(
     }
   },
 );
+
+// Nuova route per ottenere tutte le agenzie disponibili (per admin e support)
+router.get("/agencies", authMiddleware, requireRole("admin", "support"), async (req, res) => {
+  try {
+    const agencies = await agenciesRepository.getAllAgencies();
+
+    // Restituisci solo le informazioni necessarie per la selezione
+    const agenciesForSelection = agencies.map(agency => ({
+      id: agency.id,
+      name: agency.name,
+      city: agency.city,
+      address: agency.address,
+    }));
+
+    res.status(200).json(agenciesForSelection);
+  }
+  catch (error) {
+    console.error("Errore durante il recupero delle agenzie:", error);
+    res.status(500).json({ message: "Errore durante il recupero delle agenzie" });
+  }
+});
 
 router.get("/validate/:token", async (req, res) => {
   const { token } = req.params;
@@ -167,6 +215,7 @@ router.post("/register/:token", async (req, res) => {
   catch (error) {
     console.error("Errore nella decodifica del token:", error);
   }
+
   // Crea nuovo utente
   const user = await userRepository.createUser({
     email: invite.email,
