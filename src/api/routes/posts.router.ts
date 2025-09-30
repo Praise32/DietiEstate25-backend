@@ -91,7 +91,21 @@ router.get("/", (async (req: Request, res: Response) => {
 
 router.post("/", passport.authenticate("jwt", { session: false }), validate({ body: postInsertSchema }), async (req, res) => {
   try {
-    const PostInsert = await postsRepository.createPost({ ...req.body, userId: req.user!.id! });
+    // Recupera i dati dell'utente per ottenere la sua agenzia
+    const user = await userRepository.getUserById(req.user!.id!);
+
+    if (!user) {
+      res.status(404).json({ message: "Utente non trovato" });
+      return;
+    }
+
+    // Crea il post con userId e agencyId (se l'utente appartiene a un'agenzia)
+    const PostInsert = await postsRepository.createPost({
+      ...req.body,
+      userId: req.user!.id!,
+      agencyId: user.agencyId || null, // Aggiungi l'agencyId se l'utente appartiene a un'agenzia
+    });
+
     res.status(201).json(PostInsert);
   }
   catch (error: any) {

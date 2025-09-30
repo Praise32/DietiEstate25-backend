@@ -22,6 +22,28 @@ router.get("/", async (req, res) => {
   }
 });
 
+// GET agenzia del manager corrente
+router.get("/my-agency", authMiddleware, requireRole("manager"), async (req, res) => {
+  try {
+    if (!req.user?.id) {
+      res.status(401).json({ message: "Utente non autenticato" });
+      return;
+    }
+
+    const agency = await agenciesRepository.getAgencyByManagerId(req.user.id);
+    if (!agency) {
+      res.status(404).json({ message: "Agenzia non trovata" });
+      return;
+    }
+
+    res.status(200).json(agency);
+  }
+  catch (error) {
+    console.error("Errore durante il recupero dell'agenzia del manager:", error);
+    res.status(500).json({ message: "Errore interno del server" });
+  }
+});
+
 // GET agenzia specifica
 router.get("/:id", validate({ params: agenciesIdSchema }), async (req, res) => {
   try {
@@ -51,10 +73,13 @@ router.post(
     try {
       if (req.user?.role === "admin") {
         // L'admin può creare agenzie normalmente
+        // L'admin deve specificare il managerId nel body o lasciarlo null
         const agency = await agenciesRepository.createAgency(req.body);
         res.status(201).json(agency);
+        return; // Importante: aggiungi return
       }
-      else if (req.user?.role === "manager") {
+
+      if (req.user?.role === "manager") {
         // Il manager può creare solo la propria agenzia, una volta sola
         if (!req.user.id) {
           res.status(401).json({ message: "ID utente non trovato" });
@@ -69,41 +94,36 @@ router.post(
 
         const agency = await agenciesRepository.createAgencyForManager(req.body, req.user.id);
         res.status(201).json(agency);
+        return; // Importante: aggiungi return
       }
+
+      // Se arriviamo qui, c'è un problema
+      res.status(403).json({ message: "Ruolo non autorizzato" });
     }
     catch (error) {
       console.error("Errore durante la creazione dell'agenzia:", error);
+
+      // Log più dettagliato per debug
+      console.error("Dettagli errore:", {
+        message: error instanceof Error ? error.message : String(error),
+        stack: error instanceof Error ? error.stack : undefined,
+        userRole: req.user?.role,
+        userId: req.user?.id,
+        requestBody: req.body,
+      });
+
       if (error instanceof Error && error.message === "Il manager ha già creato un'agenzia") {
         res.status(403).json({ message: error.message });
       }
       else {
-        res.status(500).json({ message: "Errore interno del server" });
+        res.status(500).json({
+          message: "Errore interno del server",
+          error: process.env.NODE_ENV === "development" ? (error instanceof Error ? error.message : String(error)) : undefined,
+        });
       }
     }
   },
 );
-
-// GET agenzia del manager corrente
-router.get("/my-agency", authMiddleware, requireRole("manager"), async (req, res) => {
-  try {
-    if (!req.user?.id) {
-      res.status(401).json({ message: "Utente non autenticato" });
-      return;
-    }
-
-    const agency = await agenciesRepository.getAgencyByManagerId(req.user.id);
-    if (!agency) {
-      res.status(404).json({ message: "Agenzia non trovata" });
-      return;
-    }
-
-    res.status(200).json(agency);
-  }
-  catch (error) {
-    console.error("Errore durante il recupero dell'agenzia del manager:", error);
-    res.status(500).json({ message: "Errore interno del server" });
-  }
-});
 
 // PUT aggiorna agenzia (admin o manager dell'agenzia)
 router.put(

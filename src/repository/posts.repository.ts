@@ -1,6 +1,6 @@
 import type { SQL } from "drizzle-orm";
 
-import { and, eq, gte, lte, sql , desc} from "drizzle-orm";
+import { and, desc, eq, gte, lte, sql } from "drizzle-orm";
 
 import type { ApiPostInsertSchema, PostInsertSchema, PostUpdateSchema, SearchFilters } from "@/db/schema/posts";
 
@@ -41,18 +41,19 @@ export async function createPost(postBody: PostInsertSchema) {
   // Se le coordinate non sono fornite, calcolale tramite geocoding
   if (!latitude || !longitude) {
     console.log(`Geocoding per: ${postBody.address}, ${postBody.city}, ${postBody.cap}`);
-    
+
     const geocodeResult = await geocodeAddress(
-      postBody.address, 
-      postBody.city, 
-      postBody.cap.toString()
+      postBody.address,
+      postBody.city,
+      postBody.cap.toString(),
     );
 
     if (geocodeResult) {
       latitude = geocodeResult.latitude;
       longitude = geocodeResult.longitude;
       console.log(`Coordinate trovate: ${latitude}, ${longitude}`);
-    } else {
+    }
+    else {
       throw new Error(`Impossibile geocodificare l'indirizzo: ${postBody.address}, ${postBody.city}, ${postBody.cap}`);
     }
   }

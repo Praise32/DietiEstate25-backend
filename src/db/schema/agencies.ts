@@ -83,6 +83,7 @@ export const agenciesInsertSchema = createInsertSchema(agencies)
     cap: z.string().min(1, "Il CAP è obbligatorio"),
     phone: z.string().min(1, "Il numero di telefono è obbligatorio"),
     email: z.string().email("Inserire un indirizzo email valido"),
+    managerId: z.number().optional(), // Rendi managerId opzionale per gli admin
   });
 
 // Schema per l'aggiornamento di un'agenzia esistente

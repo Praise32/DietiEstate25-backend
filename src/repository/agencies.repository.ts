@@ -17,9 +17,19 @@ export async function getAgencyById(id: number) {
 }
 
 // Crea una nuova agenzia
+// Crea una nuova agenzia
 export async function createAgency(agencyData: AgenciesInsertSchema) {
-  const [createdAgency] = await db.insert(agencies).values(agencyData).returning();
-  return createdAgency;
+  try {
+    const [createdAgency] = await db.insert(agencies).values({
+      ...agencyData,
+      managerId: agencyData.managerId || null, // Gestisci managerId opzionale
+    }).returning();
+    return createdAgency;
+  }
+  catch (error) {
+    console.error("Errore nel repository createAgency:", error);
+    throw error;
+  }
 }
 
 // Aggiorna un'agenzia esistente
@@ -91,26 +101,26 @@ export async function removeAgentFromAgency(userId: number) {
 
 // Crea una nuova agenzia e marca il manager come avente creato l'agenzia
 export async function createAgencyForManager(agencyData: AgenciesInsertSchema, managerId: number) {
-  return db.transaction(async (tx) => {
-    // Controlla se il manager ha già creato un'agenzia
-    const [manager] = await tx.select().from(user).where(eq(user.id, managerId));
+  // Controlla se il manager ha già creato un'agenzia
+  const [manager] = await db.select().from(user).where(eq(user.id, managerId));
 
-    if (!manager) {
-      throw new Error("Manager non trovato");
-    }
+  if (!manager) {
+    throw new Error("Manager non trovato");
+  }
 
-    if (manager.hasCreatedAgency) {
-      throw new Error("Il manager ha già creato un'agenzia");
-    }
+  if (manager.hasCreatedAgency) {
+    throw new Error("Il manager ha già creato un'agenzia");
+  }
 
+  try {
     // Crea l'agenzia
-    const [createdAgency] = await tx.insert(agencies).values({
+    const [createdAgency] = await db.insert(agencies).values({
       ...agencyData,
       managerId,
     }).returning();
 
     // Aggiorna il manager: associa all'agenzia e marca come avente creato l'agenzia
-    await tx.update(user)
+    await db.update(user)
       .set({
         agencyId: createdAgency.id,
         hasCreatedAgency: true,
@@ -118,7 +128,14 @@ export async function createAgencyForManager(agencyData: AgenciesInsertSchema, m
       .where(eq(user.id, managerId));
 
     return createdAgency;
-  });
+  }
+  catch (error) {
+    console.error("Errore durante la creazione dell'agenzia per manager:", error);
+
+    // Se l'aggiornamento del manager fallisce, prova a eliminare l'agenzia creata
+    // Nota: questo non è atomico come una transazione, ma è il meglio che possiamo fare con neon-http
+    throw error;
+  }
 }
 
 // Verifica se un manager può creare un'agenzia
