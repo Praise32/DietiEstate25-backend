@@ -1,12 +1,16 @@
 import type { Request, RequestHandler, Response } from "express";
 
+import { eq, sql } from "drizzle-orm";
 import express from "express";
 import validate from "express-zod-safe";
+import { z } from "zod";
 
 import { deleteFileFromS3, getPresignedUrl, upload } from "@/api/middleware/photo.middleware";
+import { db } from "@/db";
 import {
   postIdSchema,
   postInsertSchema,
+  posts,
   postUpdateSchema,
   searchFiltersSchema,
 } from "@/db/schema/posts";
@@ -236,30 +240,75 @@ router.delete("/photos/:id", passport.authenticate("jwt", { session: false }), a
   res.status(200).json({ message: "Foto eliminata con successo." });
 });
 
-// Ottieni previsioni meteo per un immobile
+const weatherQuerySchema = z.object({
+  days: z.coerce.number().min(1).max(16).default(7),
+  latitude: z.coerce.number().min(-90).max(90), // Ora obbligatorio
+  longitude: z.coerce.number().min(-180).max(180), // Ora obbligatorio
+});
+
+// Ottieni previsioni meteo per un immobile (con coordinate obbligatorie dal frontend)
 router.get("/:id/weather", authMiddleware, async (req: Request, res: Response) => {
   try {
-    const postId = Number.parseInt(req.params.id);
+    // Validazione manuale dei parametri
+    const paramValidation = postIdSchema.safeParse(req.params);
+    if (!paramValidation.success) {
+      res.status(400).json({
+        message: "ID post non valido",
+        errors: paramValidation.error.issues,
+      });
+      return;
+    }
+
+    const queryValidation = weatherQuerySchema.safeParse(req.query);
+    if (!queryValidation.success) {
+      res.status(400).json({
+        message: "Parametri di query non validi. Latitudine e longitudine sono obbligatorie.",
+        errors: queryValidation.error.issues,
+      });
+      return;
+    }
+
+    const { id: postId } = paramValidation.data;
+    const { days, latitude, longitude } = queryValidation.data;
 
     // Verifica che l'immobile esista
-    const post = await postsRepository.getPostById(postId);
+    const [post] = await db
+      .select({
+        id: posts.id,
+        address: posts.address,
+        city: posts.city,
+      })
+      .from(posts)
+      .where(eq(posts.id, postId));
+
     if (!post) {
       res.status(404).json({ message: "Immobile non trovato" });
       return;
     }
 
-    // Estrai coordinate dall'immobile
-    // Siccome i dati geografici sono salvati in formato PostGIS, dobbiamo estrarre lat e lon
-    const latitude = post.location.lat;
-    const longitude = post.location.lon;
+    console.log(`Coordinate dal frontend per post ${postId}: lat=${latitude}, lon=${longitude}`);
 
-    // Ottieni previsioni per i prossimi 14 giorni (per la pianificazione delle visite)
-    const forecast = await getWeatherForecast(latitude, longitude, 14);
+    // Ottieni previsioni meteo con le coordinate fornite
+    const forecast = await getWeatherForecast(
+      latitude,
+      longitude,
+      Math.min(days, 16),
+    );
 
-    // Formatta i dati per un uso più semplice dal frontend
     const formattedForecast = formatWeatherData(forecast);
 
-    res.status(200).json(formattedForecast);
+    res.status(200).json({
+      postId,
+      location: {
+        latitude,
+        longitude,
+        address: post.address,
+        city: post.city,
+        source: "frontend",
+      },
+      requestedDays: Math.min(days, 16),
+      forecast: formattedForecast,
+    });
   }
   catch (error) {
     console.error("Errore durante il recupero delle previsioni meteo:", error);
