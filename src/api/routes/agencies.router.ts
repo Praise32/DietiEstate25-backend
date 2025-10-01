@@ -5,9 +5,13 @@ import { agenciesIdSchema, agenciesInsertSchema, agenciesUpdateSchema } from "@/
 import * as agenciesRepository from "@/repository/agencies.repository";
 import * as postsRepository from "@/repository/posts.repository";
 import * as userRepository from "@/repository/user.repository";
+import * as photoRepository from "@/repository/photos.repository";
 
 import { authMiddleware } from "../middleware/auth.middleware";
 import { requireRole } from "../middleware/role.middleware";
+import { getPresignedUrl } from "@/api/middleware/photo.middleware";
+
+
 
 const router = express.Router();
 
@@ -215,7 +219,22 @@ router.get("/:id/properties", validate({ params: agenciesIdSchema }), async (req
     }
 
     const posts = await postsRepository.getPostsByAgencyId(agencyId);
-    res.status(200).json(posts);
+    
+    // Aggiungi le foto a ogni post con presigned URLs
+    const postsWithPhotos = await Promise.all(
+      posts.map(async (post) => {
+        const photos = await photoRepository.getAllPhotoByPostId(post.id);
+        const photosWithUrls = await Promise.all(
+          photos.map(async photo => ({
+            ...photo,
+            url: await getPresignedUrl(photo.filename),
+          })),
+        );
+        return { ...post, photos: photosWithUrls };
+      }),
+    );
+
+    res.status(200).json(postsWithPhotos);
   }
   catch (error) {
     console.error("Errore durante il recupero degli immobili dell'agenzia:", error);

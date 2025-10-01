@@ -108,12 +108,38 @@ export async function getAllPosts(filters: SearchFilters) {
 }
 
 export async function getPostsByAgencyId(agencyId: number) {
-  return db
+  const agencyPosts = await db
     .select()
     .from(posts)
     .where(eq(posts.agencyId, agencyId))
     .orderBy(desc(posts.createdAt));
+  
+  return agencyPosts;
 }
+
+// Nuova funzione che include le foto
+export async function getPostsByAgencyIdWithPhotos(agencyId: number) {
+  const agencyPosts = await db
+    .select()
+    .from(posts)
+    .where(eq(posts.agencyId, agencyId))
+    .orderBy(desc(posts.createdAt));
+
+  // Per ogni post, recupera le foto associate
+  const postsWithPhotos = await Promise.all(
+    agencyPosts.map(async (post) => {
+      const postPhotos = await db
+        .select()
+        .from(photos)
+        .where(eq(photos.postsId, post.id));
+      
+      return { ...post, photos: postPhotos };
+    })
+  );
+
+  return postsWithPhotos;
+}
+
 
 export async function countAllPosts(filters: Omit<SearchFilters, "page" | "limit">) {
   // Costruisce le stesse condizioni per contare correttamente
