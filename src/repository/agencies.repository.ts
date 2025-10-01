@@ -1,9 +1,10 @@
-import { desc, eq, sql } from "drizzle-orm";
+import { and, desc, eq, isNull, sql } from "drizzle-orm";
 
 import type { AgenciesInsertSchema, AgenciesUpdateSchema } from "@/db/schema/agencies";
 
 import { db } from "@/db";
-import { agencies, user } from "@/db/schema";
+import { agencies, roles, user } from "@/db/schema";
+import { posts } from "@/db/schema/posts";
 
 // Recupera tutte le agenzie
 export async function getAllAgencies() {
@@ -16,7 +17,6 @@ export async function getAgencyById(id: number) {
   return agency;
 }
 
-// Crea una nuova agenzia
 // Crea una nuova agenzia
 export async function createAgency(agencyData: AgenciesInsertSchema) {
   try {
@@ -46,6 +46,27 @@ export async function updateAgency(id: number, agencyData: AgenciesUpdateSchema)
 export async function deleteAgency(id: number) {
   const [deletedAgency] = await db.delete(agencies).where(eq(agencies.id, id)).returning();
   return deletedAgency;
+}
+
+// Recupera tutti gli agenti senza agenzia
+export async function getUnassignedAgents() {
+  return db
+    .select({
+      id: user.id,
+      name: user.name,
+      email: user.email,
+      phone: user.phone,
+      createdAt: user.createdAt,
+    })
+    .from(user)
+    .innerJoin(roles, eq(user.roleId, roles.id))
+    .where(
+      and(
+        eq(roles.name, "agent"),
+        isNull(user.agencyId),
+      ),
+    )
+    .orderBy(user.createdAt);
 }
 
 // Recupera tutte le agenzie con i dettagli del manager
@@ -81,22 +102,60 @@ export async function getAgentsByAgencyId(agencyId: number) {
 
 // Assegna un agente a un'agenzia
 export async function assignAgentToAgency(userId: number, agencyId: number) {
+  // Aggiorna l'utente
   const [updatedUser] = await db
     .update(user)
     .set({ agencyId })
     .where(eq(user.id, userId))
     .returning();
-  return updatedUser;
+
+  // Aggiorna tutti i post dell'agente con il nuovo agencyId
+  const updatedPosts = await db
+    .update(posts)
+    .set({ agencyId })
+    .where(eq(posts.userId, userId))
+    .returning({
+      id: posts.id,
+      title: posts.title,
+      agencyId: posts.agencyId,
+    });
+
+  // console.log(`Aggiornati ${updatedPosts.length} post per l'agente ${userId} con agencyId ${agencyId}`);
+
+  return {
+    user: updatedUser,
+    updatedPostsCount: updatedPosts.length,
+    updatedPosts,
+  };
 }
 
-// Rimuove un agente da un'agenzia
+// Rimuove un agente da un'agenzia e rimuove l'agencyId dai suoi post
 export async function removeAgentFromAgency(userId: number) {
+  // Aggiorna l'utente
   const [updatedUser] = await db
     .update(user)
     .set({ agencyId: null })
     .where(eq(user.id, userId))
     .returning();
-  return updatedUser;
+
+  // Rimuovi l'agencyId da tutti i post dell'agente
+  const updatedPosts = await db
+    .update(posts)
+    .set({ agencyId: null })
+    .where(eq(posts.userId, userId))
+    .returning({
+      id: posts.id,
+      title: posts.title,
+      agencyId: posts.agencyId,
+    });
+
+  // console.log(`Rimosso agencyId da ${updatedPosts.length} post per l'agente ${userId}`);
+
+  return {
+    user: updatedUser,
+    updatedPostsCount: updatedPosts.length,
+    updatedPosts,
+  };
 }
 
 // Crea una nuova agenzia e marca il manager come avente creato l'agenzia

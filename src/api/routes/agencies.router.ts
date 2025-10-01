@@ -4,6 +4,7 @@ import validate from "express-zod-safe";
 import { agenciesIdSchema, agenciesInsertSchema, agenciesUpdateSchema } from "@/db/schema/agencies";
 import * as agenciesRepository from "@/repository/agencies.repository";
 import * as postsRepository from "@/repository/posts.repository";
+import * as userRepository from "@/repository/user.repository";
 
 import { authMiddleware } from "../middleware/auth.middleware";
 import { requireRole } from "../middleware/role.middleware";
@@ -22,7 +23,29 @@ router.get("/", async (req, res) => {
   }
 });
 
-// GET agenzia del manager corrente
+// GET agenti senza agenzia (solo admin e support)
+router.get("/unassigned-agents", authMiddleware, requireRole("admin", "support"), async (req, res) => {
+  try {
+    const unassignedAgents = await agenciesRepository.getUnassignedAgents();
+    res.status(200).json(unassignedAgents);
+  }
+  catch (error) {
+    console.error("Errore durante il recupero degli agenti non assegnati:", error);
+    res.status(500).json({ message: "Errore interno del server" });
+  }
+});
+
+// GET agenzia del manager corrente// GET agenti senza agenzia (solo admin e support)
+router.get("/unassigned-agents", authMiddleware, requireRole("admin", "support"), async (req, res) => {
+  try {
+    const unassignedAgents = await agenciesRepository.getUnassignedAgents();
+    res.status(200).json(unassignedAgents);
+  }
+  catch (error) {
+    console.error("Errore durante il recupero degli agenti non assegnati:", error);
+    res.status(500).json({ message: "Errore interno del server" });
+  }
+});
 router.get("/my-agency", authMiddleware, requireRole("manager"), async (req, res) => {
   try {
     if (!req.user?.id) {
@@ -72,15 +95,12 @@ router.post(
   async (req, res) => {
     try {
       if (req.user?.role === "admin") {
-        // L'admin può creare agenzie normalmente
-        // L'admin deve specificare il managerId nel body o lasciarlo null
         const agency = await agenciesRepository.createAgency(req.body);
         res.status(201).json(agency);
-        return; // Importante: aggiungi return
+        return;
       }
 
       if (req.user?.role === "manager") {
-        // Il manager può creare solo la propria agenzia, una volta sola
         if (!req.user.id) {
           res.status(401).json({ message: "ID utente non trovato" });
           return;
@@ -94,32 +114,19 @@ router.post(
 
         const agency = await agenciesRepository.createAgencyForManager(req.body, req.user.id);
         res.status(201).json(agency);
-        return; // Importante: aggiungi return
+        return;
       }
 
-      // Se arriviamo qui, c'è un problema
       res.status(403).json({ message: "Ruolo non autorizzato" });
     }
     catch (error) {
       console.error("Errore durante la creazione dell'agenzia:", error);
 
-      // Log più dettagliato per debug
-      console.error("Dettagli errore:", {
-        message: error instanceof Error ? error.message : String(error),
-        stack: error instanceof Error ? error.stack : undefined,
-        userRole: req.user?.role,
-        userId: req.user?.id,
-        requestBody: req.body,
-      });
-
       if (error instanceof Error && error.message === "Il manager ha già creato un'agenzia") {
         res.status(403).json({ message: error.message });
       }
       else {
-        res.status(500).json({
-          message: "Errore interno del server",
-          error: process.env.NODE_ENV === "development" ? (error instanceof Error ? error.message : String(error)) : undefined,
-        });
+        res.status(500).json({ message: "Errore interno del server" });
       }
     }
   },
@@ -143,12 +150,6 @@ router.put(
     }
 
     try {
-      if (!putID.data.id) {
-        res.status(400).json({ message: "ID agenzia mancante" });
-        return;
-      }
-
-      // Prima recupera l'agenzia esistente
       const existingAgency = await agenciesRepository.getAgencyById(putID.data.id);
 
       if (!existingAgency) {
@@ -156,7 +157,6 @@ router.put(
         return;
       }
 
-      // Verifica i permessi contro l'agenzia esistente
       if (req.user?.role !== "admin" && existingAgency.managerId !== req.user?.id) {
         res.status(403).json({ message: "Non autorizzato ad aggiornare questa agenzia" });
         return;
@@ -259,20 +259,33 @@ router.post(
         return;
       }
 
-      // Verifica se l'utente è admin o manager dell'agenzia
+      // Verifica che l'utente esista e sia un agente
+      const userToAssign = await userRepository.getUserById(userId);
+      if (!userToAssign) {
+        res.status(404).json({ message: "Utente non trovato" });
+        return;
+      }
+
+      // Verifica che l'utente sia un agente
+      const agentRole = await userRepository.getRoleId("agent");
+      if (userToAssign.roleId !== agentRole) {
+        res.status(400).json({ message: "L'utente non è un agente" });
+        return;
+      }
+
+      // Verifica autorizzazioni
       if (req.user?.role !== "admin" && agency.managerId !== req.user?.id) {
         res.status(403).json({ message: "Non autorizzato ad assegnare agenti a questa agenzia" });
         return;
       }
 
-      const updatedUser = await agenciesRepository.assignAgentToAgency(userId, agencyId);
-
-      if (!updatedUser) {
-        res.status(404).json({ message: "Utente non trovato" });
-        return;
-      }
-
-      res.status(200).json(updatedUser);
+      const result = await agenciesRepository.assignAgentToAgency(userId, agencyId);
+      res.status(200).json({
+        message: "Agente assegnato all'agenzia con successo",
+        user: result.user,
+        updatedPostsCount: result.updatedPostsCount,
+        details: `Aggiornati ${result.updatedPostsCount} immobili dell'agente`,
+      });
     }
     catch (error) {
       console.error("Errore durante l'assegnazione dell'agente all'agenzia:", error);
@@ -281,40 +294,51 @@ router.post(
   },
 );
 
-// POST rimuovi agente dall'agenzia (solo admin o manager dell'agenzia)
-router.post(
-  "/remove-agent/:userId",
+// DELETE rimuovi agente dall'agenzia (RESTful e corretto)
+router.delete(
+  "/:agencyId/agents/:userId",
   authMiddleware,
   async (req, res) => {
     try {
+      const agencyId = Number(req.params.agencyId);
       const userId = Number(req.params.userId);
 
-      // Ottieni l'agencyId dell'utente
-      const userToUpdate = await agenciesRepository.getAgentsByAgencyId(userId);
-
-      if (!userToUpdate || userToUpdate.length === 0) {
-        res.status(404).json({ message: "Utente non trovato o non appartiene a nessuna agenzia" });
+      // Verifica che l'agenzia esista
+      const agency = await agenciesRepository.getAgencyById(agencyId);
+      if (!agency) {
+        res.status(404).json({ message: "Agenzia non trovata" });
         return;
       }
 
-      // Verifica se l'utente è admin o manager dell'agenzia
-      if (req.user?.role !== "admin") {
-        const agencyId = userToUpdate[0].agencyId;
-        if (agencyId === null) {
-          res.status(403).json({ message: "Non autorizzato a rimuovere agenti da questa agenzia" });
-          return;
-        }
-        const agency = await agenciesRepository.getAgencyById(agencyId);
+      // Verifica che l'utente esista e appartenga all'agenzia
+      const agents = await agenciesRepository.getAgentsByAgencyId(agencyId);
+      const userToRemove = agents.find(agent => agent.id === userId);
 
-        if (!agency || agency.managerId !== req.user?.id) {
-          res.status(403).json({ message: "Non autorizzato a rimuovere agenti da questa agenzia" });
-          return;
-        }
+      if (!userToRemove) {
+        res.status(404).json({ message: "Utente non trovato in questa agenzia" });
+        return;
       }
 
-      const updatedUser = await agenciesRepository.removeAgentFromAgency(userId);
+      // Verifica autorizzazioni
+      if (req.user?.role !== "admin" && agency.managerId !== req.user?.id) {
+        res.status(403).json({ message: "Non autorizzato a rimuovere agenti da questa agenzia" });
+        return;
+      }
 
-      res.status(200).json(updatedUser);
+      // Impedisci al manager di rimuovere se stesso
+      if (req.user?.role === "manager" && userId === req.user.id) {
+        res.status(403).json({ message: "Un manager non può rimuovere se stesso dall'agenzia" });
+        return;
+      }
+
+      const result = await agenciesRepository.removeAgentFromAgency(userId);
+
+      res.status(200).json({
+        message: "Agente rimosso dall'agenzia con successo",
+        user: result.user,
+        updatedPostsCount: result.updatedPostsCount,
+        details: `Rimosso agencyId da ${result.updatedPostsCount} immobili dell'agente`,
+      });
     }
     catch (error) {
       console.error("Errore durante la rimozione dell'agente dall'agenzia:", error);
