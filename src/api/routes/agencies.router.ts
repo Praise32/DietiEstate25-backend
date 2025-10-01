@@ -148,8 +148,16 @@ router.put(
         return;
       }
 
-      // Verifica se l'utente è admin o manager dell'agenzia
-      if (req.user?.role !== "admin" && putBody.data.managerId !== req.user?.id) {
+      // Prima recupera l'agenzia esistente
+      const existingAgency = await agenciesRepository.getAgencyById(putID.data.id);
+
+      if (!existingAgency) {
+        res.status(404).json({ message: "Agenzia non trovata" });
+        return;
+      }
+
+      // Verifica i permessi contro l'agenzia esistente
+      if (req.user?.role !== "admin" && existingAgency.managerId !== req.user?.id) {
         res.status(403).json({ message: "Non autorizzato ad aggiornare questa agenzia" });
         return;
       }
