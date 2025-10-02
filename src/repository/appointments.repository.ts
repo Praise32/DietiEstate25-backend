@@ -42,15 +42,13 @@ export async function getAllAppointments() {
   return result;
 }
 
-// Recupero appuntamenti per agenzia (per manager) - AGGIORNATO
+// Recupero appuntamenti per agenzia (per manager) 
 export async function getAppointmentsByAgencyId(agencyId: number) {
-  // Prima recuperiamo tutti gli agenti dell'agenzia
+  // Recupera gli agenti dell'agenzia usando il campo agencyId direttamente
   const agentIds = await db
     .select({ id: user.id })
     .from(user)
-    .where(sql`${user.id} IN (
-      SELECT user_id FROM agency_users WHERE agency_id = ${agencyId}
-    )`);
+    .where(eq(user.agencyId, agencyId));
 
   if (agentIds.length === 0) {
     return [];
@@ -128,13 +126,11 @@ export async function getAppointmentsByAgencyIdForCalendar(
   start?: Date,
   end?: Date,
 ) {
-  // Prima recuperiamo tutti gli agenti dell'agenzia
+  // Recupera gli agenti dell'agenzia usando il campo agencyId direttamente
   const agentIds = await db
     .select({ id: user.id })
     .from(user)
-    .where(sql`${user.id} IN (
-      SELECT user_id FROM agency_users WHERE agency_id = ${agencyId}
-    )`);
+    .where(eq(user.agencyId, agencyId)); // Usa il campo agencyId direttamente
 
   if (agentIds.length === 0) {
     return [];
@@ -226,7 +222,7 @@ export async function getAppointmentsByAgentId(agentId: number) {
         address: posts.address,
         city: posts.city,
       },
-      user: {
+      client: { // Rinomina da 'user' a 'client' per chiarezza
         id: user.id,
         name: user.name,
         email: user.email,

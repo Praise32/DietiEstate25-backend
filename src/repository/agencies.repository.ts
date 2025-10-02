@@ -216,8 +216,8 @@ export async function getAgencyByAgentId(agentId: number) {
       agency: agencies,
     })
     .from(agencies)
-    .innerJoin(sql`agency_users`, sql`agencies.id = agency_users.agency_id`)
-    .where(sql`agency_users.user_id = ${agentId}`);
+    .innerJoin(user, eq(agencies.id, user.agencyId))
+    .where(eq(user.id, agentId));
 
   return result?.agency;
 }
