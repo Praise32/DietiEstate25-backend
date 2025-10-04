@@ -145,6 +145,7 @@ export const searchFiltersSchema = z.object({
   minRooms: z.coerce.number().int().min(1).optional(),
   maxRooms: z.coerce.number().int().min(1).optional(),
   minSize: z.coerce.number().int().min(0).optional(),
+  maxSize: z.coerce.number().int().min(0).optional(),
 
   // Filtri boolean
   hasElevator: z.enum(["true", "false"]).transform(val => val === "true").optional(),
@@ -153,16 +154,18 @@ export const searchFiltersSchema = z.object({
   page: z.coerce.number().int().min(1).default(1),
   limit: z.coerce.number().int().min(1).max(100).default(10),
 
-  latitude: z.coerce.number().optional(),
-  longitude: z.coerce.number().optional(),
+  // Parametri geografici per ricerca nelle vicinanze
+  latitude: z.coerce.number().min(-90).max(90).optional(),
+  longitude: z.coerce.number().min(-180).max(180).optional(),
   radius: z.coerce.number().min(0).optional(), // Raggio in metri
 }).refine((data) => {
   // Se un parametro geo è presente, devono esserlo tutti e tre
-  if (data.latitude || data.longitude || data.radius) {
+  if (data.latitude !== undefined || data.longitude !== undefined || data.radius !== undefined) {
     return data.latitude !== undefined && data.longitude !== undefined && data.radius !== undefined;
   }
   return true;
 }, { message: "Per la ricerca a raggio sono necessari latitudine, longitudine e raggio." });
+
 
 // Schema per l'inserimento via API che accetta lat/lon separati
 export const apiPostInsertSchema = postInsertSchema.extend({

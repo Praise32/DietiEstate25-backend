@@ -75,6 +75,7 @@ router.get(
   "/google",
   passport.authenticate("google", {
     scope: ["profile", "email"],
+    session: false,
   }),
 );
 
@@ -98,9 +99,9 @@ router.get(
     );
 
     // Redirect al frontend con il token
-    // res.redirect(`${env.FRONTEND_URL}/auth?token=${token}`);
+    res.redirect(`${env.FRONTEND_URL}/auth/google/callback?token=${token}`);
 
-    // Prova senza frontend
+    /* Prova senza frontend
     res.json({
       message: "Autenticazione Google riuscita",
       token,
@@ -110,6 +111,7 @@ router.get(
         email: req.user!.email,
       },
     });
+      */
   },
 );
 

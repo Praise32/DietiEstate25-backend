@@ -12,7 +12,7 @@ const EnvSchema = z.object({
   S3_BUCKET_NAME: z.string().nonempty(),
   GOOGLE_CLIENT_ID: z.string().nonempty(),
   GOOGLE_CLIENT_SECRET: z.string().nonempty(),
-  GOOGLE_CALLBACK_URL: z.string().nonempty(),
+  GOOGLE_CALLBACK_URL: z.string().nonempty().url(),
   FRONTEND_URL: z.string().nonempty().url(),
   GMAIL_USER: z.string().nonempty().email(),
   GMAIL_APP_PASSWORD: z.string().nonempty(),

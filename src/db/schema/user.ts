@@ -14,7 +14,7 @@ const user = pgTable("users", {
   id: serial().primaryKey(),
   googleId: text("google_id"),
   name: text(),
-  phone: text().unique().notNull(),
+  phone: text().unique(),
   email: text().unique(),
   password: text().notNull(),
   createdAt: timestamp("created_at", { mode: "string" }).notNull().defaultNow(),

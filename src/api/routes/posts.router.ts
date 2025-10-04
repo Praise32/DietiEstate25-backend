@@ -50,8 +50,10 @@ router.get("/:id", validate({ params: postIdSchema }), async (req, res) => {
   res.json({ ...foundPost, photos: photosWithUrls, author });
 });
 
+// ...existing code...
+
 router.get("/", (async (req: Request, res: Response) => {
-  // 1. Validare i query params con lo schema Zod
+  // Validare i query params con lo schema Zod
   const validation = searchFiltersSchema.safeParse(req.query);
 
   if (!validation.success) {
@@ -61,11 +63,59 @@ router.get("/", (async (req: Request, res: Response) => {
   const filters = validation.data;
 
   try {
-    // 2. Passare i filtri validati alle funzioni del repository
-    const posts = await postsRepository.getAllPosts(filters);
-    const total = await postsRepository.countAllPosts(filters);
+    let posts;
+    let total;
 
-    // Il resto della logica per arricchire con le foto rimane invariato
+    // Estrai i parametri di paginazione e geografici
+    const { page, limit, latitude, longitude, radius, ...otherFilters } = filters;
+
+    // Se ci sono parametri geografici, usa la ricerca nelle vicinanze
+    if (latitude !== undefined && longitude !== undefined && radius !== undefined) {
+      // Controlla se ci sono altri filtri
+      const hasOtherFilters = Object.values(otherFilters).some(value => value !== undefined);
+
+      if (hasOtherFilters) {
+        // Ricerca geografica con filtri aggiuntivi
+        posts = await postsRepository.getPostsNearbyWithFilters(
+          latitude,
+          longitude,
+          radius,
+          otherFilters,
+          page,
+          limit,
+        );
+
+        total = await postsRepository.countPostsNearbyWithFilters(
+          latitude,
+          longitude,
+          radius,
+          otherFilters,
+        );
+      }
+      else {
+        // Solo ricerca geografica
+        posts = await postsRepository.getPostsNearby(
+          latitude,
+          longitude,
+          radius,
+          page,
+          limit,
+        );
+
+        total = await postsRepository.countPostsNearby(
+          latitude,
+          longitude,
+          radius,
+        );
+      }
+    }
+    else {
+      // Ricerca normale con filtri
+      posts = await postsRepository.getAllPosts(filters);
+      total = await postsRepository.countAllPosts(otherFilters);
+    }
+
+    // Arricchisci con le foto
     const postsWithPhotos = await Promise.all(
       posts.map(async (post) => {
         const photos = await photoRepository.getAllPhotoByPostId(post.id);
@@ -79,19 +129,36 @@ router.get("/", (async (req: Request, res: Response) => {
       }),
     );
 
-    res.status(200).json({
+    const response: any = {
       data: postsWithPhotos,
       page: filters.page,
       limit: filters.limit,
       total,
       totalPages: Math.ceil(total / filters.limit),
-    });
+    };
+
+    // Aggiungi info geografiche se presenti
+    if (latitude !== undefined && longitude !== undefined && radius !== undefined) {
+      response.searchCenter = {
+        latitude,
+        longitude,
+      };
+      response.searchRadius = radius;
+      response.searchType = "nearby";
+    }
+    else {
+      response.searchType = "standard";
+    }
+
+    res.status(200).json(response);
   }
   catch (error) {
     console.error("Errore durante la ricerca dei post:", error);
     res.status(500).json({ message: "Errore interno del server" });
   }
 }) as RequestHandler);
+
+// ...existing code...
 
 router.post("/", passport.authenticate("jwt", { session: false }), validate({ body: postInsertSchema }), async (req, res) => {
   try {

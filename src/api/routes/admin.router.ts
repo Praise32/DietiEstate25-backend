@@ -18,52 +18,6 @@ import { requireRole } from "../middleware/role.middleware";
 
 const router = express.Router();
 
-/* Funzione Attualmente inutile
-router.post(
-  "/send",
-  authMiddleware,
-  requireRole("admin"), // Assicurati che solo gli admin possano inviare inviti
-  validate({ body: inviteSchema }),
-  async (req, res) => {
-    if (!req.user || !req.user.id) {
-      res.status(401).json({ message: "Utente non autenticato o ID utente non trovato." });
-      return;
-    }
-
-    const { email, role } = req.body;
-
-    const token = jwt.sign(
-      { email, role },
-      env.JWT_SECRET_KEY,
-      { expiresIn: "24h" },
-    );
-
-    try {
-      // Crea l'invito nel database
-      await inviteRepository.createInvite({
-        email,
-        role,
-        token,
-        invitedBy: req.user.id,
-        expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000),
-      });
-
-      // Invia l'email di invito
-      await sendInviteEmail(email, token);
-
-      res.status(201).json({
-        message: "Invito creato e inviato con successo",
-        registrationLink: `${env.FRONTEND_URL}/register/invite/${token}`,
-      });
-    }
-    catch (error) {
-      console.error("Errore durante la creazione o l'invio dell'invito:", error);
-      res.status(500).json({ message: "Si è verificato un errore durante l'invio dell'invito.", error });
-    }
-  },
-);
-*/
-
 // Admin crea un nuovo utente di supporto o manager
 router.post(
   "/create",

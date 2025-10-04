@@ -69,6 +69,132 @@ export async function createPost(postBody: PostInsertSchema) {
   return post;
 }
 
+// Ricerca immobili nelle vicinanze con paginazione
+export async function getPostsNearby(
+  latitude: number,
+  longitude: number,
+  radiusMeters: number,
+  page: number = 1,
+  limit: number = 10,
+) {
+  const offset = (page - 1) * limit;
+
+  // Crea un punto geografico dal centro della ricerca
+  const searchCenterPoint = `SRID=4326;POINT(${longitude} ${latitude})`;
+
+  const nearbyPosts = await db
+    .select()
+    .from(posts)
+    .where(
+      sql`ST_DWithin(
+        ${posts.location}, 
+        ${searchCenterPoint}::geography, 
+        ${radiusMeters}
+      )`,
+    )
+    .orderBy(
+      sql`ST_Distance(
+        ${posts.location}, 
+        ${searchCenterPoint}::geography
+      )`,
+    )
+    .limit(limit)
+    .offset(offset);
+
+  return nearbyPosts;
+}
+
+// Conta immobili nelle vicinanze
+export async function countPostsNearby(
+  latitude: number,
+  longitude: number,
+  radiusMeters: number,
+) {
+  const searchCenterPoint = `SRID=4326;POINT(${longitude} ${latitude})`;
+
+  const result = await db
+    .select({ count: sql<number>`count(*)` })
+    .from(posts)
+    .where(
+      sql`ST_DWithin(
+        ${posts.location}, 
+        ${searchCenterPoint}::geography, 
+        ${radiusMeters}
+      )`,
+    );
+
+  return Number(result[0]?.count ?? 0);
+}
+
+// Ricerca immobili nelle vicinanze con filtri aggiuntivi
+export async function getPostsNearbyWithFilters(
+  latitude: number,
+  longitude: number,
+  radiusMeters: number,
+  filters: Omit<SearchFilters, "latitude" | "longitude" | "radius" | "page" | "limit">,
+  page: number = 1,
+  limit: number = 10,
+) {
+  const offset = (page - 1) * limit;
+  const searchCenterPoint = `SRID=4326;POINT(${longitude} ${latitude})`;
+
+  // Costruisci le condizioni dai filtri
+  const conditions = buildWhereConditions(filters);
+
+  // Aggiungi la condizione geografica
+  conditions.push(
+    sql`ST_DWithin(
+      ${posts.location}, 
+      ${searchCenterPoint}::geography, 
+      ${radiusMeters}
+    )`,
+  );
+
+  const nearbyPosts = await db
+    .select()
+    .from(posts)
+    .where(and(...conditions))
+    .orderBy(
+      sql`ST_Distance(
+        ${posts.location}, 
+        ${searchCenterPoint}::geography
+      )`,
+    )
+    .limit(limit)
+    .offset(offset);
+
+  return nearbyPosts;
+}
+
+// Conta immobili nelle vicinanze con filtri
+export async function countPostsNearbyWithFilters(
+  latitude: number,
+  longitude: number,
+  radiusMeters: number,
+  filters: Omit<SearchFilters, "latitude" | "longitude" | "radius" | "page" | "limit">,
+) {
+  const searchCenterPoint = `SRID=4326;POINT(${longitude} ${latitude})`;
+
+  // Costruisci le condizioni dai filtri
+  const conditions = buildWhereConditions(filters);
+
+  // Aggiungi la condizione geografica
+  conditions.push(
+    sql`ST_DWithin(
+      ${posts.location}, 
+      ${searchCenterPoint}::geography, 
+      ${radiusMeters}
+    )`,
+  );
+
+  const result = await db
+    .select({ count: sql<number>`count(*)` })
+    .from(posts)
+    .where(and(...conditions));
+
+  return Number(result[0]?.count ?? 0);
+}
+
 export async function updatePost(postId: number, postBody: PostUpdateSchema) {
   const [post] = await db
     .update(posts)
@@ -178,6 +304,9 @@ function buildWhereConditions(params: Omit<SearchFilters, "page" | "limit">): SQ
   if (params.minSize) {
     conditions.push(gte(posts.size, params.minSize));
   }
+  if (params.maxSize) {
+    conditions.push(lte(posts.size, params.maxSize));
+  }
   if (params.hasElevator !== undefined) {
     conditions.push(eq(posts.hasElevator, params.hasElevator));
   }
@@ -185,19 +314,8 @@ function buildWhereConditions(params: Omit<SearchFilters, "page" | "limit">): SQ
     conditions.push(eq(posts.energyClass, params.energyClass));
   }
 
-  if (params.latitude && params.longitude && params.radius) {
-    // Crea un punto geografico dal centro della ricerca
-    const searchCenterPoint = `SRID=4326;POINT(${params.longitude} ${params.latitude})`;
-
-    // ST_DWithin controlla se la colonna `location` è entro `params.radius` metri dal punto centrale
-    conditions.push(
-      sql`ST_DWithin(
-                ${posts.location}, 
-                ${searchCenterPoint}::geography, 
-                ${params.radius}
-            )`,
-    );
-  }
+  // NON includiamo qui la condizione geografica
+  // Sarà gestita separatamente nelle funzioni che ne hanno bisogno
 
   return conditions;
 }

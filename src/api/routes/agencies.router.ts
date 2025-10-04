@@ -90,15 +90,15 @@ router.get("/:id", validate({ params: agenciesIdSchema }), async (req, res) => {
   }
 });
 
-// POST crea agenzia (admin o manager - una sola volta)
+// POST crea agenzia (admin, support o manager - una sola volta)
 router.post(
   "/",
   authMiddleware,
-  requireRole("admin", "manager"),
+  requireRole("admin", "support", "manager"),
   validate({ body: agenciesInsertSchema }),
   async (req, res) => {
     try {
-      if (req.user?.role === "admin") {
+      if (req.user?.role === "admin" || req.user?.role === "support") {
         const agency = await agenciesRepository.createAgency(req.body);
         res.status(201).json(agency);
         return;
@@ -136,7 +136,7 @@ router.post(
   },
 );
 
-// PUT aggiorna agenzia (admin o manager dell'agenzia)
+// PUT aggiorna agenzia (admin, support o manager dell'agenzia)
 router.put(
   "/:id",
   authMiddleware,
@@ -161,7 +161,7 @@ router.put(
         return;
       }
 
-      if (req.user?.role !== "admin" && existingAgency.managerId !== req.user?.id) {
+      if (req.user?.role !== "admin" && req.user?.role !== "support" && existingAgency.managerId !== req.user?.id) {
         res.status(403).json({ message: "Non autorizzato ad aggiornare questa agenzia" });
         return;
       }
@@ -176,11 +176,11 @@ router.put(
   },
 );
 
-// DELETE elimina agenzia (solo admin)
+// DELETE elimina agenzia (solo admin e support)
 router.delete(
   "/:id",
   authMiddleware,
-  requireRole("admin"),
+  requireRole("admin", "support"),
   async (req, res) => {
     const deletePost = agenciesIdSchema.safeParse(req.params);
     if (deletePost.error || !deletePost.data) {
@@ -262,7 +262,7 @@ router.get("/:id/agents", validate({ params: agenciesIdSchema }), async (req, re
   }
 });
 
-// POST assegna agente all'agenzia (solo admin o manager dell'agenzia)
+// POST assegna agente all'agenzia (admin, support o manager dell'agenzia)
 router.post(
   "/:id/assign-agent/:userId",
   authMiddleware,
@@ -293,7 +293,7 @@ router.post(
       }
 
       // Verifica autorizzazioni
-      if (req.user?.role !== "admin" && agency.managerId !== req.user?.id) {
+      if (req.user?.role !== "admin" && req.user?.role !== "support" && agency.managerId !== req.user?.id) {
         res.status(403).json({ message: "Non autorizzato ad assegnare agenti a questa agenzia" });
         return;
       }
@@ -313,7 +313,7 @@ router.post(
   },
 );
 
-// DELETE rimuovi agente dall'agenzia (RESTful e corretto)
+// DELETE rimuovi agente dall'agenzia (admin, support o manager dell'agenzia)
 router.delete(
   "/:agencyId/agents/:userId",
   authMiddleware,
@@ -339,7 +339,7 @@ router.delete(
       }
 
       // Verifica autorizzazioni
-      if (req.user?.role !== "admin" && agency.managerId !== req.user?.id) {
+      if (req.user?.role !== "admin" && req.user?.role !== "support" && agency.managerId !== req.user?.id) {
         res.status(403).json({ message: "Non autorizzato a rimuovere agenti da questa agenzia" });
         return;
       }
@@ -365,5 +365,4 @@ router.delete(
     }
   },
 );
-
 export default router;

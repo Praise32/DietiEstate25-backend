@@ -39,7 +39,7 @@ router.post(
 
       case "support":
         // Support può invitare tutti tranne se stesso
-        isAuthorized = ["admin", "manager", "agent", "customer"].includes(role);
+        isAuthorized = ["manager", "agent", "customer"].includes(role);
         break;
 
       case "manager":
