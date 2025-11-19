@@ -195,6 +195,7 @@ router.post("/", passport.authenticate("jwt", { session: false }), validate({ bo
   }
 });
 
+// Elimina un post - Può essere eliminato da: proprietario, manager dell'agenzia, admin, support
 router.delete("/:id", passport.authenticate("jwt", { session: false }), isOwnerMiddlewarePosts, async (req, res) => {
   const deletePost = postIdSchema.safeParse(req.params);
   if (deletePost.error || !deletePost.data) {
@@ -218,6 +219,7 @@ router.delete("/:id", passport.authenticate("jwt", { session: false }), isOwnerM
   res.json(Post);
 });
 
+// Modifica un post - Può essere modificato da: proprietario, manager dell'agenzia, admin, support
 router.put("/:id", authMiddleware, isOwnerMiddlewarePosts, async (req, res) => {
   const putID = postIdSchema.safeParse(req.params);
   if (putID.error || !putID.data) {

@@ -76,9 +76,7 @@ export async function authMiddleware(
   });
 }
 
-// ...existing code...
-
-// Middleware per verificare che l'utente sia il proprietario del post
+// Middleware per verificare che l'utente sia il proprietario del post o abbia permessi sufficienti
 export async function isOwnerMiddlewarePosts(
   req: Request,
   res: Response,
@@ -89,18 +87,41 @@ export async function isOwnerMiddlewarePosts(
     res.status(400).json(updatePost.error).end();
     return;
   }
+  
   const foundPost = await postsRepository.getPostById(updatePost.data.id);
   if (!foundPost) {
     res.status(404).end();
     return;
   }
 
-  if (foundPost.userId !== req.user!.id) {
-    res.status(403).json("Non sei autorizzato a modificare il post middleware").end();
+  const currentUser = req.user!;
+
+  // Admin e Support possono modificare/eliminare qualsiasi post
+  if (currentUser.role === "admin" || currentUser.role === "support") {
+    req.posts = foundPost;
+    next();
     return;
   }
 
-  req.posts = foundPost;
+  // Il proprietario può sempre modificare/eliminare il proprio post
+  if (foundPost.userId === currentUser.id) {
+    req.posts = foundPost;
+    next();
+    return;
+  }
 
-  next();
+  // Manager può modificare/eliminare post della propria agenzia
+  if (currentUser.role === "manager" && foundPost.agencyId !== null) {
+    // Importa il repository all'inizio del file se non già fatto
+    const agenciesRepository = await import("@/repository/agencies.repository");
+    const managerAgency = await agenciesRepository.getAgencyByManagerId(currentUser.id!);
+    
+    if (managerAgency && managerAgency.id === foundPost.agencyId) {
+      req.posts = foundPost;
+      next();
+      return;
+    }
+  }
+
+  res.status(403).json({ message: "Non sei autorizzato a modificare questo post" }).end();
 }
