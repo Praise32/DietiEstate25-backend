@@ -284,8 +284,39 @@ router.delete("/photos/:id", passport.authenticate("jwt", { session: false }), a
     return;
   }
 
-  // Controlla che la foto appartenga all'utente autenticato
-  if (photo.userId !== req.user!.id) {
+  // Recupera il post per verificare i permessi
+  const post = await postsRepository.getPostById(photo.postsId);
+  if (!post) {
+    res.status(404).json({ message: "Post non trovato." });
+    return;
+  }
+
+  // Verifica i permessi
+  let isAuthorized = false;
+  const currentUser = req.user!;
+
+  // Admin e Support possono eliminare qualsiasi foto
+  if (currentUser.role === "admin" || currentUser.role === "support") {
+    isAuthorized = true;
+  }
+  // Il proprietario della foto può eliminarla
+  else if (photo.userId === currentUser.id) {
+    isAuthorized = true;
+  }
+  // Il proprietario del post può eliminare le foto
+  else if (post.userId === currentUser.id) {
+    isAuthorized = true;
+  }
+  // Manager può eliminare foto dei post della propria agenzia
+  else if (currentUser.role === "manager" && post.agencyId !== null) {
+    const agenciesRepository = await import("@/repository/agencies.repository");
+    const managerAgency = await agenciesRepository.getAgencyByManagerId(currentUser.id!);
+    if (managerAgency && managerAgency.id === post.agencyId) {
+      isAuthorized = true;
+    }
+  }
+
+  if (!isAuthorized) {
     res.status(403).json({ message: "Non sei autorizzato a eliminare questa foto." });
     return;
   }
