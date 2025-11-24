@@ -266,11 +266,13 @@ router.delete("/:id", authMiddleware, async (req: Request, res: Response) => {
       return;
     }
 
-    // Elimina l'appuntamento (passa anche il ruolo)
-    await appointmentsRepository.deleteAppointment(Number(id), req.user!.id, req.user!.role!);
+    if (!req.user.role) {
+      res.status(400).json({ message: "Ruolo utente non valido" });
+      return;
+    }
 
-    res.status(200).json({ message: "Appuntamento cancellato con successo" });
-  }
+    // Elimina l'appuntamento (passa anche il ruolo)
+    await appointmentsRepository.deleteAppointment(Number(id), req.user.id, req.user.role);  }
   catch (error) {
     console.error("Errore durante l'eliminazione dell'appuntamento:", error);
     res.status(500).json({ message: "Errore durante l'eliminazione dell'appuntamento" });

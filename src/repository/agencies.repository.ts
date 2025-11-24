@@ -1,4 +1,4 @@
-import { and, desc, eq, isNull, sql } from "drizzle-orm";
+import { and, desc, eq, isNull } from "drizzle-orm";
 
 import type { AgenciesInsertSchema, AgenciesUpdateSchema } from "@/db/schema/agencies";
 
@@ -120,7 +120,6 @@ export async function assignAgentToAgency(userId: number, agencyId: number) {
       agencyId: posts.agencyId,
     });
 
-  // console.log(`Aggiornati ${updatedPosts.length} post per l'agente ${userId} con agencyId ${agencyId}`);
 
   return {
     user: updatedUser,
@@ -148,8 +147,6 @@ export async function removeAgentFromAgency(userId: number) {
       title: posts.title,
       agencyId: posts.agencyId,
     });
-
-  // console.log(`Rimosso agencyId da ${updatedPosts.length} post per l'agente ${userId}`);
 
   return {
     user: updatedUser,

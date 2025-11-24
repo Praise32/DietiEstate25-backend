@@ -2,7 +2,7 @@ import type { SQL } from "drizzle-orm";
 
 import { and, desc, eq, gte, lte, sql } from "drizzle-orm";
 
-import type { ApiPostInsertSchema, PostInsertSchema, PostUpdateSchema, SearchFilters } from "@/db/schema/posts";
+import type { PostInsertSchema, PostUpdateSchema, SearchFilters } from "@/db/schema/posts";
 
 import { db } from "@/db";
 import { photos } from "@/db/schema/photo";
@@ -27,7 +27,7 @@ export async function getAllPostsWithPhotos() {
     if (!postsMap.has(postId)) {
       postsMap.set(postId, { ...row.post, photo: [] });
     }
-    if (row.photo && row.photo.id) {
+    if (row.photo?.id) {
       postsMap.get(postId).photo.push(row.photo);
     }
   }

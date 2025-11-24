@@ -14,7 +14,7 @@ export async function authMiddleware(
 ) {
   const authHeader = req.get("authorization");
 
-  if (!authHeader || !authHeader.startsWith("Bearer ")) {
+  if (!authHeader?.startsWith("Bearer ")) {
     res
       .status(401)
       .json({ message: "Accesso negato. Nessun token fornito o formato non valido." });

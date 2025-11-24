@@ -15,6 +15,60 @@ import { requireRole } from "../middleware/role.middleware";
 
 const router = express.Router();
 
+// Helper: Verifica se l'utente ha i permessi per invitare un certo ruolo
+function checkAuthorization(userRole: string, targetRole: string): boolean {
+  switch (userRole) {
+    case "admin":
+      return ["admin", "support", "manager", "agent", "customer"].includes(targetRole);
+    case "support":
+      return ["manager", "agent", "customer"].includes(targetRole);
+    case "manager":
+      return targetRole === "agent";
+    default:
+      return false;
+  }
+}
+
+// Helper: Gestisce la logica complessa per determinare l'agencyId
+async function resolveAgencyId(
+  userRole: string,
+  userId: number,
+  targetRole: string,
+  requestedAgencyId?: number,
+): Promise<{ finalAgencyId: number | null; error?: { status: number; message: string } }> {
+  if (targetRole !== "agent") {
+    return { finalAgencyId: null };
+  }
+
+  if (userRole === "manager") {
+    const managerAgency = await agenciesRepository.getAgencyByManagerId(userId);
+    if (!managerAgency) {
+      return { finalAgencyId: null, error: { status: 403, message: "Devi prima creare un'agenzia prima di invitare agenti" } };
+    }
+    return { finalAgencyId: managerAgency.id };
+  }
+
+  if (userRole === "admin" || userRole === "support") {
+    if (!requestedAgencyId) {
+      return { finalAgencyId: null, error: { status: 400, message: "È necessario specificare un'agenzia quando si invita un agente" } };
+    }
+
+    const allAgencies = await agenciesRepository.getAllAgencies();
+    if (allAgencies.length === 0) {
+      return { finalAgencyId: null, error: { status: 400, message: "Impossibile invitare agenti: non esistono agenzie nel sistema. Creare prima un'agenzia." } };
+    }
+
+    const agency = await agenciesRepository.getAgencyById(requestedAgencyId);
+    if (!agency) {
+      return { finalAgencyId: null, error: { status: 404, message: "L'agenzia specificata non esiste" } };
+    }
+
+    return { finalAgencyId: requestedAgencyId };
+  }
+
+  return { finalAgencyId: null };
+}
+
 // Route per creare un invito
 router.post(
   "/create",
@@ -28,77 +82,25 @@ router.post(
     }
     const { email, role, agencyId } = req.body;
 
-    // Nuova logica per i permessi basati sui requisiti
-    let isAuthorized = false;
-
-    switch (req.user.role) {
-      case "admin":
-        // Admin può invitare tutti i ruoli
-        isAuthorized = ["admin", "support", "manager", "agent", "customer"].includes(role);
-        break;
-
-      case "support":
-        // Support può invitare tutti tranne se stesso
-        isAuthorized = ["manager", "agent", "customer"].includes(role);
-        break;
-
-      case "manager":
-        // Manager può invitare solo agent
-        isAuthorized = role === "agent";
-        break;
-
-      case "agent":
-        // Agent non può invitare nessuno (già escluso dal requireRole)
-        isAuthorized = false;
-        break;
-
-      default:
-        isAuthorized = false;
+    if (!req.user.role) {
+      res.status(403).json({ message: "Ruolo utente non disponibile." });
+      return;
     }
 
-    if (!isAuthorized) {
+    // 1. Verifica autorizzazioni
+    if (!checkAuthorization(req.user.role, role)) {
       res.status(403).json({
         message: `Non autorizzato a creare inviti per il ruolo '${role}'`,
       });
       return;
     }
 
-    // Gestione speciale per gli agenti
-    let finalAgencyId = null;
+    // 2. Risolvi agencyId (gestione speciale per agenti)
+    const { finalAgencyId, error } = await resolveAgencyId(req.user.role, req.user.id, role, agencyId);
 
-    if (role === "agent") {
-      if (req.user.role === "manager") {
-        // Manager può invitare agenti solo nella sua agenzia
-        const managerAgency = await agenciesRepository.getAgencyByManagerId(req.user.id);
-        if (!managerAgency) {
-          res.status(403).json({ message: "Devi prima creare un'agenzia prima di invitare agenti" });
-          return;
-        }
-        finalAgencyId = managerAgency.id;
-      }
-      else if (req.user.role === "admin" || req.user.role === "support") {
-        // Admin e Support devono specificare un'agenzia quando invitano agenti
-        if (!agencyId) {
-          res.status(400).json({ message: "È necessario specificare un'agenzia quando si invita un agente" });
-          return;
-        }
-
-        // Verifica che esistano agenzie nel sistema
-        const allAgencies = await agenciesRepository.getAllAgencies();
-        if (allAgencies.length === 0) {
-          res.status(400).json({ message: "Impossibile invitare agenti: non esistono agenzie nel sistema. Creare prima un'agenzia." });
-          return;
-        }
-
-        // Verifica che l'agenzia specificata esista
-        const agency = await agenciesRepository.getAgencyById(agencyId);
-        if (!agency) {
-          res.status(404).json({ message: "L'agenzia specificata non esiste" });
-          return;
-        }
-
-        finalAgencyId = agencyId;
-      }
+    if (error) {
+      res.status(error.status).json({ message: error.message });
+      return;
     }
 
     const token = jwt.sign(

@@ -33,8 +33,8 @@ export async function geocodeAddress(
     if (response.data && response.data.length > 0) {
       const result = response.data[0];
       return {
-        latitude: parseFloat(result.lat),
-        longitude: parseFloat(result.lon),
+        latitude: Number.parseFloat(result.lat),
+        longitude: Number.parseFloat(result.lon),
         formattedAddress: result.display_name
       };
     }

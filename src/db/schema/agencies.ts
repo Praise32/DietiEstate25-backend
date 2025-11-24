@@ -1,10 +1,7 @@
 import { relations, sql } from "drizzle-orm";
 import {
-  boolean,
   integer,
-  PgColumn,
   pgTable,
-  PgTableWithColumns,
   serial,
   text,
   timestamp,

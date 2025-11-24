@@ -2,16 +2,11 @@ import bcrypt from "bcryptjs";
 import { eq } from "drizzle-orm";
 import express from "express";
 import validate from "express-zod-safe";
-import jwt from "jsonwebtoken";
 import { z } from "zod";
 
 import { db } from "@/db";
-import { inviteSchema } from "@/db/schema/invites";
 import { roles, userInserSchema } from "@/db/schema/user";
-import env from "@/env";
-import * as inviteRepository from "@/repository/invites.repository";
 import * as userRepository from "@/repository/user.repository";
-import { sendInviteEmail } from "@/utils/email";
 
 import { authMiddleware } from "../middleware/auth.middleware";
 import { requireRole } from "../middleware/role.middleware";

@@ -3,14 +3,14 @@ import nodemailer from "nodemailer";
 import env from "@/env";
 
 // Configura il transporter
+// Configura il transporter
 const transporter = nodemailer.createTransport({
-  service: "gmail",
+  host: "smtp.gmail.com", // Host esplicito di Gmail
+  port: 465,              // Porta standard per SSL
+  secure: true,           // Usa SSL/TLS esplicito (Risolve S5332)
   auth: {
     user: env.GMAIL_USER,
     pass: env.GMAIL_APP_PASSWORD, // Password specifica per le app
-  },
-  tls: {
-    rejectUnauthorized: false,
   },
 });
 

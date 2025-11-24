@@ -3,16 +3,13 @@ import { eq } from "drizzle-orm";
 import express from "express";
 import validate from "express-zod-safe";
 import jwt from "jsonwebtoken";
-import { z } from "zod";
 
 import { db } from "@/db";
-import { roles, userInserSchema, userLoginSchema, userSelectSchema } from "@/db/schema/user";
+import { roles, userInserSchema, userLoginSchema } from "@/db/schema/user";
 import env from "@/env";
 import * as loginRepositoy from "@/repository/login.repository";
 import passport from "@/utils/passport";
 
-import { authMiddleware } from "../middleware/auth.middleware";
-import { requireRole } from "../middleware/role.middleware";
 
 const router = express.Router();
 
@@ -49,14 +46,14 @@ router.post(
       // Gestione errore unique constraint (Postgres/Drizzle)
       if (
         error.code === "23505" // Postgres unique_violation
-        || (error.message && error.message.includes("unique"))
+        || (error.message?.includes("unique"))
       ) {
         // Cerca il campo che ha causato il conflitto nel messaggio di errore
         let field = "campo";
         const detail = error.detail || error.message;
         // Esempio di detail: 'Key (email)=(test@example.com) already exists.'
-        const match = detail && detail.match(/\(([^)]+)\)=/);
-        if (match && match[1]) {
+        const match = detail?.match(/\(([^)]{1,100})\)=/);
+        if (match?.[1]) {
           field = match[1];
         }
         res
