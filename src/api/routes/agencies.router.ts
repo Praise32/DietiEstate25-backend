@@ -39,17 +39,7 @@ router.get("/unassigned-agents", authMiddleware, requireRole("admin", "support")
   }
 });
 
-// GET agenzia del manager corrente// GET agenti senza agenzia (solo admin e support)
-router.get("/unassigned-agents", authMiddleware, requireRole("admin", "support"), async (req, res) => {
-  try {
-    const unassignedAgents = await agenciesRepository.getUnassignedAgents();
-    res.status(200).json(unassignedAgents);
-  }
-  catch (error) {
-    console.error("Errore durante il recupero degli agenti non assegnati:", error);
-    res.status(500).json({ message: "Errore interno del server" });
-  }
-});
+// GET agenzia del manager autenticato
 router.get("/my-agency", authMiddleware, requireRole("manager"), async (req, res) => {
   try {
     if (!req.user?.id) {
