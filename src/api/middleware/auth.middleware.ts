@@ -109,12 +109,11 @@ export async function isOwnerMiddlewarePosts(
     next();
     return;
   }
-
   // Manager può modificare/eliminare post della propria agenzia
-  if (currentUser.role === "manager" && foundPost.agencyId !== null) {
+  if (currentUser.role === "manager" && foundPost.agencyId !== null && currentUser.id) {
     // Importa il repository all'inizio del file se non già fatto
     const agenciesRepository = await import("@/repository/agencies.repository");
-    const managerAgency = await agenciesRepository.getAgencyByManagerId(currentUser.id!);
+    const managerAgency = await agenciesRepository.getAgencyByManagerId(currentUser.id);
     
     if (managerAgency && managerAgency.id === foundPost.agencyId) {
       req.posts = foundPost;

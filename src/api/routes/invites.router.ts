@@ -76,7 +76,7 @@ router.post(
   requireRole("support", "manager", "admin"),
   validate({ body: inviteSchema }),
   async (req, res) => {
-    if (!req.user || !req.user.id) {
+    if (!req.user?.id) {
       res.status(401).json({ message: "Utente non autenticato o ID utente non trovato." });
       return;
     }
