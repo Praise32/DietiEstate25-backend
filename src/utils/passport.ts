@@ -1,12 +1,11 @@
 import bcrypt from "bcryptjs"; // Per confrontare le password
 import { eq } from "drizzle-orm";
+import { randomBytes } from "node:crypto";
 // config/passport.ts
 import passport from "passport";
 import { Strategy as GoogleStrategy } from "passport-google-oauth20";
 import { ExtractJwt, Strategy as JwtStrategy } from "passport-jwt"; // Importa JwtStrategy e ExtractJwt
 import { Strategy as LocalStrategy } from "passport-local"; // Importa LocalStrategy
-
-import type { UserIdSchema } from "@/db/schema/user"; // Assicurati di avere il tuo modello utente
 
 import { db } from "@/db";
 import { roles } from "@/db/schema/user";
@@ -38,7 +37,7 @@ passport.use(
             name: profile.displayName,
             roleId: customerRole.id,
             // Genera una password casuale sicura per gli account Google
-            password: bcrypt.hashSync(Math.random().toString(36).slice(-8), 10),
+            password: bcrypt.hashSync(randomBytes(16).toString("hex"), 10),
             phone: "",
             googleId: profile.id,
           });
@@ -47,7 +46,7 @@ passport.use(
             return done(new Error("Failed to create user"), undefined);
           }
 
-          user = { ...newUser, password: bcrypt.hashSync(Math.random().toString(36).slice(-8), 10) };
+          user = { ...newUser, password: bcrypt.hashSync(randomBytes(16).toString("hex"), 10) };
         }
 
         return done(null, user);
@@ -64,7 +63,7 @@ passport.use(
   new LocalStrategy(
     {
       usernameField: "identifier",
-      passwordField: "password",
+      passwordField: "password", // NOSONAR: Questo è il nome del campo, non una password reale
       session: false, // Disabilita la sessione per l'autenticazione locale
     },
     async (identifier, password, done) => {
@@ -140,4 +139,4 @@ passport.use(
   }),
 );
 
-export default passport;
+export { default } from "passport";

@@ -13,6 +13,10 @@ import passport from "@/utils/passport";
 
 const app = express();
 
+// Disabilita l'header X-Powered-By per sicurezza (S5689)
+app.disable("x-powered-by");
+
+
 const corsOptions = {
   origin: [
     "http://localhost:4200",

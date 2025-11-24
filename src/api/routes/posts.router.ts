@@ -1,6 +1,6 @@
 import type { Request, RequestHandler, Response } from "express";
 
-import { eq, sql } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import express from "express";
 import validate from "express-zod-safe";
 import { z } from "zod";
@@ -183,7 +183,7 @@ router.post("/", passport.authenticate("jwt", { session: false }), validate({ bo
     console.error("Errore durante la creazione del post:", error);
 
     // Gestisci errori specifici del geocoding
-    if (error.message && error.message.includes("geocodificare")) {
+    if (error.message?.includes("geocodificare")) {
       res.status(400).json({
         message: "Indirizzo non valido o non trovato. Verifica che via, città e CAP siano corretti.",
         details: error.message,
@@ -263,7 +263,7 @@ router.post("/:id/upload", authMiddleware, isOwnerMiddlewarePosts, upload.array(
       url: file.url,
       filename: file.fileName,
       userId: req.user!.id!,
-      postsId: req.posts!.id!,
+      postsId: req.posts!.id,
     });
     photos.push(photo);
   }

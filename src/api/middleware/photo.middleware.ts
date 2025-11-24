@@ -22,6 +22,10 @@ const s3 = new S3Client(s3Config);
 // --- Configurazione Multer-S3 ---
 
 export const upload = multer({
+    // Imposta un limite di dimensione del file per sicurezza contro attacchi Denial of Service (DOS)
+  limits: {
+    fileSize: 8 * 1024 * 1024, // 8 MB
+  },
   storage: multerS3({
     s3, // Il client S3 configurato
     bucket: env.S3_BUCKET_NAME,
@@ -61,7 +65,6 @@ export async function deleteFileFromS3(fileName: string): Promise<void> {
     console.error("Errore durante l'eliminazione del file da S3:", error);
   }
 
-  return Promise.resolve();
 }
 
 export async function getPresignedUrl(key: string, expiresInSeconds = 3600): Promise<string> {
