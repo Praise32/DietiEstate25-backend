@@ -36,34 +36,66 @@ async function resolveAgencyId(
   targetRole: string,
   requestedAgencyId?: number,
 ): Promise<{ finalAgencyId: number | null; error?: { status: number; message: string } }> {
-  if (targetRole !== "agent") {
-    return { finalAgencyId: null };
-  }
-
-  if (userRole === "manager") {
-    const managerAgency = await agenciesRepository.getAgencyByManagerId(userId);
-    if (!managerAgency) {
-      return { finalAgencyId: null, error: { status: 403, message: "Devi prima creare un'agenzia prima di invitare agenti" } };
+  
+  // CASO 1: Invito di un MANAGER (Nuova logica)
+  if (targetRole === "manager") {
+    // Solo Admin e Support possono invitare manager
+    if (userRole !== "admin" && userRole !== "support") {
+      return { finalAgencyId: null, error: { status: 403, message: "Solo Admin e Support possono invitare manager." } };
     }
-    return { finalAgencyId: managerAgency.id };
-  }
 
-  if (userRole === "admin" || userRole === "support") {
+    // Se non viene specificata un'agenzia, è un invito generico (il manager ne creerà una nuova)
     if (!requestedAgencyId) {
-      return { finalAgencyId: null, error: { status: 400, message: "È necessario specificare un'agenzia quando si invita un agente" } };
+      return { finalAgencyId: null };
     }
 
-    const allAgencies = await agenciesRepository.getAllAgencies();
-    if (allAgencies.length === 0) {
-      return { finalAgencyId: null, error: { status: 400, message: "Impossibile invitare agenti: non esistono agenzie nel sistema. Creare prima un'agenzia." } };
-    }
-
+    // Se viene specificata un'agenzia, stiamo assegnando il manager a un'agenzia esistente
     const agency = await agenciesRepository.getAgencyById(requestedAgencyId);
     if (!agency) {
-      return { finalAgencyId: null, error: { status: 404, message: "L'agenzia specificata non esiste" } };
+      return { finalAgencyId: null, error: { status: 404, message: "L'agenzia specificata non esiste." } };
+    }
+
+    // CONTROLLO CRUCIALE: L'agenzia deve essere senza manager
+    if (agency.managerId !== null) {
+      return { 
+        finalAgencyId: null, 
+        error: { 
+          status: 409, // Conflict
+          message: `L'agenzia '${agency.name}' ha già un manager assegnato. Rimuoverlo prima di invitarne uno nuovo.` 
+        } 
+      };
     }
 
     return { finalAgencyId: requestedAgencyId };
+  }
+
+  // CASO 2: Invito di un AGENTE (Logica esistente)
+  if (targetRole === "agent") {
+    if (userRole === "manager") {
+      const managerAgency = await agenciesRepository.getAgencyByManagerId(userId);
+      if (!managerAgency) {
+        return { finalAgencyId: null, error: { status: 403, message: "Devi prima creare un'agenzia prima di invitare agenti" } };
+      }
+      return { finalAgencyId: managerAgency.id };
+    }
+
+    if (userRole === "admin" || userRole === "support") {
+      if (!requestedAgencyId) {
+        return { finalAgencyId: null, error: { status: 400, message: "È necessario specificare un'agenzia quando si invita un agente" } };
+      }
+
+      const allAgencies = await agenciesRepository.getAllAgencies();
+      if (allAgencies.length === 0) {
+        return { finalAgencyId: null, error: { status: 400, message: "Impossibile invitare agenti: non esistono agenzie nel sistema. Creare prima un'agenzia." } };
+      }
+
+      const agency = await agenciesRepository.getAgencyById(requestedAgencyId);
+      if (!agency) {
+        return { finalAgencyId: null, error: { status: 404, message: "L'agenzia specificata non esiste" } };
+      }
+
+      return { finalAgencyId: requestedAgencyId };
+    }
   }
 
   return { finalAgencyId: null };

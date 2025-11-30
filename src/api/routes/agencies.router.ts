@@ -355,4 +355,39 @@ router.delete(
     }
   },
 );
+
+// DELETE Rimuovi il manager corrente dall'agenzia (solo Admin/Support)
+router.delete(
+  "/:id/manager",
+  authMiddleware,
+  requireRole("admin", "support"),
+  async (req, res) => {
+    const agencyId = Number(req.params.id);
+    
+    try {
+      const agency = await agenciesRepository.getAgencyById(agencyId);
+      if (!agency) {
+        res.status(404).json({ message: "Agenzia non trovata" });
+        return;
+      }
+
+      if (!agency.managerId) {
+        res.status(400).json({ message: "Questa agenzia non ha un manager assegnato." });
+        return;
+      }
+
+      // Rimuovi il manager
+      await agenciesRepository.removeManagerFromAgency(agencyId, agency.managerId);
+
+      res.status(200).json({ 
+        message: "Manager rimosso con successo. L'agenzia è ora orfana e in attesa di un nuovo manager." 
+      });
+    } catch (error) {
+      console.error("Errore rimozione manager:", error);
+      res.status(500).json({ message: "Errore interno del server" });
+    }
+  }
+);
+
+
 export default router;

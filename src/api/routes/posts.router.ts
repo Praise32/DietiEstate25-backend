@@ -50,8 +50,6 @@ router.get("/:id", validate({ params: postIdSchema }), async (req, res) => {
   res.json({ ...foundPost, photos: photosWithUrls, author });
 });
 
-// ...existing code...
-
 router.get("/", (async (req: Request, res: Response) => {
   // Validare i query params con lo schema Zod
   const validation = searchFiltersSchema.safeParse(req.query);
