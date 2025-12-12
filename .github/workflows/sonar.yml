@@ -22,7 +22,7 @@ jobs:
         run: npm install
 
       - name: Run Tests and Generate Coverage
-        run: npm test:coverage
+        run: npm run test:coverage
         # Questo comando crea la cartella coverage/lcov.info che SonarCloud leggerà
 
       - name: SonarCloud Scan
