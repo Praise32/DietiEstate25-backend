@@ -1,5 +1,5 @@
 import { pgTable, foreignKey, unique, serial, text, timestamp, integer, numeric, boolean, pgEnum } from "drizzle-orm/pg-core"
-import { sql } from "drizzle-orm"
+
 
 export const listingType = pgEnum("listing_type", ['vendita', 'affitto'])
 
@@ -46,8 +46,6 @@ export const posts = pgTable("posts", {
 	id: serial().primaryKey().notNull(),
 	title: text().notNull(),
 	description: text(),
-	// TODO: failed to parse database type 'geography'
-	location: unknown("location").notNull(),
 	address: text().notNull(),
 	city: text().notNull(),
 	cap: integer().notNull(),
