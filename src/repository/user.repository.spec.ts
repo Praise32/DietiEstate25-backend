@@ -17,7 +17,7 @@ describe("User Repository - updatePassword", () => {
   it("dovrebbe aggiornare la password per l'utente specificato (Scenario Successo)", async () => {
     // Arrange
     const userId = 1;
-    const newPassword = "hashed_password_123";
+    const mockHashedValue = "test_hashed_value";
 
     // Mock della catena: db.update().set().where()
     const whereMock = jest.fn().mockResolvedValue(undefined); // update non ritorna nulla di solito se non richiesto
@@ -25,11 +25,11 @@ describe("User Repository - updatePassword", () => {
     (db.update as jest.Mock).mockReturnValue({ set: setMock });
 
     // Act
-    await updatePassword(userId, newPassword);
+    await updatePassword(userId, mockHashedValue);
 
     // Assert
     expect(db.update).toHaveBeenCalledWith(user);
-    expect(setMock).toHaveBeenCalledWith({ password: newPassword });
+    expect(setMock).toHaveBeenCalledWith({ password: mockHashedValue });
     expect(whereMock).toHaveBeenCalled();
   });
 });
