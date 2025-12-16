@@ -345,7 +345,7 @@ const weatherQuerySchema = z.object({
 });
 
 // Ottieni previsioni meteo per un immobile (con coordinate obbligatorie dal frontend)
-router.get("/:id/weather", authMiddleware, async (req: Request, res: Response) => {
+router.get("/:id/weather", async (req: Request, res: Response) => {
   try {
     // Validazione manuale dei parametri
     const paramValidation = postIdSchema.safeParse(req.params);
