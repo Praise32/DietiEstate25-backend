@@ -1,4 +1,4 @@
-# DietiEstate25 - Backend (StreetCats)
+# DietiEstate25 - Backend
 
 Backend per la piattaforma immobiliare "StreetCats", sviluppato per il progetto DietiEstate25.
 Questa applicazione fornisce API RESTful robuste per la gestione di annunci immobiliari, agenzie, utenti e funzionalità geospaziali avanzate.
@@ -113,3 +113,4 @@ Questa applicazione fornisce API RESTful robuste per la gestione di annunci immo
 ## 📄 Licenza
 
 Distribuito sotto licenza MIT. Vedi il file `LICENSE` per maggiori informazioni.
+
