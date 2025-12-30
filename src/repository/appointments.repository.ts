@@ -42,7 +42,7 @@ export async function getAllAppointments() {
   return result;
 }
 
-// Recupero appuntamenti per agenzia (per manager) 
+// Recupero appuntamenti per agenzia (per manager)
 export async function getAppointmentsByAgencyId(agencyId: number) {
   // Recupera gli agenti dell'agenzia usando il campo agencyId direttamente
   const agentIds = await db

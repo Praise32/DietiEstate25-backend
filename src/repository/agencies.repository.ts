@@ -120,7 +120,6 @@ export async function assignAgentToAgency(userId: number, agencyId: number) {
       agencyId: posts.agencyId,
     });
 
-
   return {
     user: updatedUser,
     updatedPostsCount: updatedPosts.length,
@@ -219,7 +218,6 @@ export async function getAgencyByAgentId(agentId: number) {
   return result?.agency;
 }
 
-
 // Rimuove il manager da un'agenzia (rendendola orfana)
 export async function removeManagerFromAgency(agencyId: number, managerId: number) {
   // 1. Imposta managerId a NULL nell'agenzia
@@ -233,9 +231,9 @@ export async function removeManagerFromAgency(agencyId: number, managerId: numbe
   if (updatedAgency) {
     await db
       .update(user)
-      .set({ 
+      .set({
         agencyId: null,
-        hasCreatedAgency: false 
+        hasCreatedAgency: false,
       })
       .where(eq(user.id, managerId));
   }

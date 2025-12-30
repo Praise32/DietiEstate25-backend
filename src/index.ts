@@ -2,8 +2,8 @@ import cors from "cors";
 import express from "express";
 
 import adminUsersRouter from "@/api/routes/admin.router";
-import appointmentsRouter from "@/api/routes/appointments.router";
 import agenciesRouter from "@/api/routes/agencies.router";
+import appointmentsRouter from "@/api/routes/appointments.router";
 import inviteRouter from "@/api/routes/invites.router";
 import loginRouter from "@/api/routes/login.router";
 import postsRouter from "@/api/routes/posts.router";
@@ -15,7 +15,6 @@ const app = express();
 
 // Disabilita l'header X-Powered-By per sicurezza (S5689)
 app.disable("x-powered-by");
-
 
 const corsOptions = {
   origin: [

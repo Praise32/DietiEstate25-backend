@@ -5,54 +5,57 @@ Questa applicazione fornisce API RESTful robuste per la gestione di annunci immo
 
 ## 🚀 Tecnologie Utilizzate
 
-*   **Runtime:** Node.js
-*   **Linguaggio:** TypeScript
-*   **Framework Web:** Express.js
-*   **Database:** PostgreSQL (NeonDB) con estensione **PostGIS** per le query geospaziali.
-*   **ORM:** Drizzle ORM
-*   **Autenticazione:** Passport.js (JWT, Google OAuth 2.0, Local Strategy)
-*   **Storage File:** AWS S3 (tramite Multer S3) per il caricamento delle foto.
-*   **Validazione:** Zod & Express-Zod-Safe
-*   **Servizi Esterni:**
-    *   OpenMeteo (Previsioni meteo localizzate)
-    *   Google OAuth (Social Login)
+- **Runtime:** Node.js
+- **Linguaggio:** TypeScript
+- **Framework Web:** Express.js
+- **Database:** PostgreSQL (NeonDB) con estensione **PostGIS** per le query geospaziali.
+- **ORM:** Drizzle ORM
+- **Autenticazione:** Passport.js (JWT, Google OAuth 2.0, Local Strategy)
+- **Storage File:** AWS S3 (tramite Multer S3) per il caricamento delle foto.
+- **Validazione:** Zod & Express-Zod-Safe
+- **Servizi Esterni:**
+  - OpenMeteo (Previsioni meteo localizzate)
+  - Google OAuth (Social Login)
 
 ## ✨ Funzionalità Principali
 
-*   **Autenticazione & Utenti:**
-    *   Registrazione e Login (Email/Password).
-    *   Login tramite Google.
-    *   Gestione Ruoli (Admin, Manager, Agent, Customer).
-    *   Protezione rotte tramite JWT Bearer Token.
-*   **Gestione Immobili (Posts):**
-    *   CRUD completo degli annunci immobiliari.
-    *   **Geolocalizzazione:** Salvataggio coordinate e ricerca immobili per raggio (km) tramite PostGIS.
-    *   Filtri avanzati (prezzo, stanze, mq, classe energetica, ecc.).
-    *   Upload multiplo di immagini su AWS S3.
-*   **Agenzie:**
-    *   Gestione profili agenzie.
-    *   Associazione Manager e Agenti.
-*   **Utility:**
-    *   Servizio Meteo integrato per visualizzare le previsioni nella zona dell'immobile.
-    *   Sistema di inviti via email per nuovi membri dello staff.
+- **Autenticazione & Utenti:**
+  - Registrazione e Login (Email/Password).
+  - Login tramite Google.
+  - Gestione Ruoli (Admin, Manager, Agent, Customer).
+  - Protezione rotte tramite JWT Bearer Token.
+- **Gestione Immobili (Posts):**
+  - CRUD completo degli annunci immobiliari.
+  - **Geolocalizzazione:** Salvataggio coordinate e ricerca immobili per raggio (km) tramite PostGIS.
+  - Filtri avanzati (prezzo, stanze, mq, classe energetica, ecc.).
+  - Upload multiplo di immagini su AWS S3.
+- **Agenzie:**
+  - Gestione profili agenzie.
+  - Associazione Manager e Agenti.
+- **Utility:**
+  - Servizio Meteo integrato per visualizzare le previsioni nella zona dell'immobile.
+  - Sistema di inviti via email per nuovi membri dello staff.
 
 ## 🛠️ Installazione e Configurazione
 
 ### Prerequisiti
-*   Node.js (v18 o superiore)
-*   PostgreSQL (con supporto PostGIS)
-*   Account AWS (per S3 bucket)
-*   Account Google Cloud (per OAuth credentials)
+
+- Node.js (v18 o superiore)
+- PostgreSQL (con supporto PostGIS)
+- Account AWS (per S3 bucket)
+- Account Google Cloud (per OAuth credentials)
 
 ### Passaggi
 
 1.  **Clona il repository:**
+
     ```bash
     git clone <url-repository>
     cd DietiEstate25-backend
     ```
 
 2.  **Installa le dipendenze:**
+
     ```bash
     npm install
     ```
@@ -84,6 +87,7 @@ Questa applicazione fornisce API RESTful robuste per la gestione di annunci immo
 
 4.  **Database Migration:**
     Sincronizza lo schema del database utilizzando Drizzle Kit:
+
     ```bash
     npx drizzle-kit push
     ```
@@ -95,22 +99,21 @@ Questa applicazione fornisce API RESTful robuste per la gestione di annunci immo
 
 ## 📜 Script Disponibili
 
-*   `npm run dev`: Avvia il server in modalità sviluppo (hot-reload).
-*   `npm run build`: Compila il progetto TypeScript in JavaScript nella cartella `dist`.
-*   `npm start`: Avvia il server di produzione (richiede build).
-*   `npm run lint`: Esegue il controllo del codice con ESLint.
-*   `npm run format`: Formatta il codice con Prettier.
-*   `npm run start_docker`: Builda e avvia il container Docker.
+- `npm run dev`: Avvia il server in modalità sviluppo (hot-reload).
+- `npm run build`: Compila il progetto TypeScript in JavaScript nella cartella `dist`.
+- `npm start`: Avvia il server di produzione (richiede build).
+- `npm run lint`: Esegue il controllo del codice con ESLint.
+- `npm run format`: Formatta il codice con Prettier.
+- `npm run start_docker`: Builda e avvia il container Docker.
 
 ## 📂 Struttura del Progetto
 
-*   `src/api`: Router, Controller e Middleware Express.
-*   `src/db`: Schema Drizzle, Migrazioni e connessione DB.
-*   `src/repository`: Logica di accesso ai dati (Query).
-*   `src/utils`: Servizi ausiliari (Passport, WeatherService, ecc.).
-*   `src/env.ts`: Validazione centralizzata delle variabili d'ambiente.
+- `src/api`: Router, Controller e Middleware Express.
+- `src/db`: Schema Drizzle, Migrazioni e connessione DB.
+- `src/repository`: Logica di accesso ai dati (Query).
+- `src/utils`: Servizi ausiliari (Passport, WeatherService, ecc.).
+- `src/env.ts`: Validazione centralizzata delle variabili d'ambiente.
 
 ## 📄 Licenza
 
 Distribuito sotto licenza MIT. Vedi il file `LICENSE` per maggiori informazioni.
-

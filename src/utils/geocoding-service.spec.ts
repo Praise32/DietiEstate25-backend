@@ -1,10 +1,11 @@
 import axios from "axios";
-import { geocodeAddress } from "./geocodingService";
+
+import { geocodeAddress } from "./geocoding-service";
 
 jest.mock("axios");
 const mockedAxios = axios as jest.Mocked<typeof axios>;
 
-describe("Geocoding Service - geocodeAddress", () => {
+describe("geocoding Service - geocodeAddress", () => {
   afterEach(() => {
     jest.clearAllMocks();
   });
@@ -48,9 +49,9 @@ describe("Geocoding Service - geocodeAddress", () => {
   it("dovrebbe gestire gli errori di rete restituendo null (Scenario Eccezione)", async () => {
     // Arrange
     mockedAxios.get.mockRejectedValue(new Error("Network Error"));
-    
+
     // Silenzia console.error per questo test specifico
-    const consoleSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
+    const consoleSpy = jest.spyOn(console, "error").mockImplementation(() => {});
 
     // Act
     const result = await geocodeAddress("Via Roma", "Napoli", "80100");
@@ -58,7 +59,7 @@ describe("Geocoding Service - geocodeAddress", () => {
     // Assert
     expect(result).toBeNull();
     expect(consoleSpy).toHaveBeenCalled(); // Verifica che l'errore sia stato loggato
-    
+
     // Ripristina console.error
     consoleSpy.mockRestore();
   });

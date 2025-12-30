@@ -69,6 +69,6 @@ export const invitesUpdateSchema = createUpdateSchema(invites).omit({
   }
 });
 
-export type invitesInsertSchema = z.infer<typeof invitesInsertSchema>;
-export type invitesUpdateSchema = z.infer<typeof invitesUpdateSchema>;
-export type invitesIdSchema = z.infer<typeof invitesIdSchema>;
+export type InvitesInsertSchema = z.infer<typeof invitesInsertSchema>;
+export type InvitesUpdateSchema = z.infer<typeof invitesUpdateSchema>;
+export type InvitesIdSchema = z.infer<typeof invitesIdSchema>;

@@ -22,12 +22,12 @@ export const agenciesRelations = relations(agencies, ({ one, many }) => ({
   manager: one(user, {
     fields: [agencies.managerId],
     references: [user.id],
-    relationName: 'agency_manager',
+    relationName: "agency_manager",
   }),
   agents: many(user, {
-    relationName: 'agency_agents',
+    relationName: "agency_agents",
   }),
-    properties: many(posts, {
-    relationName: 'agency_properties',
+  properties: many(posts, {
+    relationName: "agency_properties",
   }),
 }));

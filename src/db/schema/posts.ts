@@ -85,25 +85,12 @@ const { createSelectSchema } = createSchemaFactory({
   coerce: true,
 });
 
-export const postIdSchema = createSelectSchema(posts).omit({
-  title: true,
-  description: true,
-  location: true,
-  address: true,
-  city: true,
-  cap: true,
-  listingType: true,
-  price: true,
-  rooms: true,
-  size: true,
-  floor: true,
-  hasElevator: true,
-  energyClass: true,
-  agencyId: true,
-  createdAt: true,
-  updatedAt: true,
-  userId: true,
+export const postIdSchema = createSelectSchema(posts).pick({
+  id: true,
 });
+
+// Aggiungi un nuovo schema per il select completo
+export const postSelectSchema = createSelectSchema(posts);
 
 export const postInsertSchema = createInsertSchema(posts, {
   title: schema => schema.nonempty(),
@@ -166,7 +153,6 @@ export const searchFiltersSchema = z.object({
   return true;
 }, { message: "Per la ricerca a raggio sono necessari latitudine, longitudine e raggio." });
 
-
 // Schema per l'inserimento via API che accetta lat/lon separati
 export const apiPostInsertSchema = postInsertSchema.extend({
   latitude: z.number(),
@@ -178,3 +164,4 @@ export type SearchFilters = z.infer<typeof searchFiltersSchema>;
 export type PostInsertSchema = z.infer<typeof postInsertSchema>;
 export type PostUpdateSchema = z.infer<typeof postUpdateSchema>;
 export type PostIdSchema = z.infer<typeof postIdSchema>;
+export type PostSelectSchema = z.infer<typeof postSelectSchema>;

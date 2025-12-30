@@ -1,5 +1,6 @@
 import { db } from "@/db";
 import { appointments } from "@/db/schema/appointments";
+
 import { deleteAppointment } from "./appointments.repository";
 
 // 1. Mock del modulo DB per isolamento totale
@@ -10,7 +11,7 @@ jest.mock("@/db", () => ({
   },
 }));
 
-describe("Appointments Repository", () => {
+describe("appointments Repository", () => {
   // Reset dei mock prima di ogni test
   beforeEach(() => {
     jest.clearAllMocks();
@@ -46,7 +47,7 @@ describe("Appointments Repository", () => {
       await deleteAppointment(1, 123, "customer");
 
       // Assert
-      // Verifichiamo che where sia stato chiamato. 
+      // Verifichiamo che where sia stato chiamato.
       // Nota: verificare gli argomenti esatti di 'and()' e 'eq()' di Drizzle è complesso nei mock,
       // ma possiamo verificare che la catena sia stata eseguita.
       expect(db.delete).toHaveBeenCalled();
@@ -65,6 +66,4 @@ describe("Appointments Repository", () => {
       expect(result).toBeUndefined();
     });
   });
-
-
 });

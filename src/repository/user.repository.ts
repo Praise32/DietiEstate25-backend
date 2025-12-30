@@ -24,6 +24,27 @@ export async function getUserById(id: number) {
   return userFound;
 }
 
+export async function getUserByEmail(email: string) {
+  const [userFound] = await db
+    .select({
+      id: user.id,
+      name: user.name,
+      email: user.email,
+      phone: user.phone,
+      password: user.password,
+      agencyId: user.agencyId,
+      hasCreatedAgency: user.hasCreatedAgency,
+      roleId: user.roleId,
+      role: roles.name,
+      createdAt: user.createdAt,
+      updatedAt: user.updatedAt,
+    })
+    .from(user)
+    .leftJoin(roles, eq(user.roleId, roles.id))
+    .where(eq(user.email, email));
+  return userFound;
+}
+
 export async function getRoleId(roleName: string) {
   const [role] = await db.select().from(roles).where(eq(roles.name, roleName));
   return role ? role.id : null;
@@ -62,7 +83,7 @@ export async function createUser(userBody: {
   phone: string;
   password: string;
   roleId: number;
-  agencyId?: number;
+  agencyId?: number | null;
   googleId?: string;
   hasCreatedAgency?: boolean;
 }) {
@@ -81,7 +102,6 @@ export async function createUser(userBody: {
       updatedAt: user.updatedAt,
     });
 
-  // Recupera anche il nome del ruolo
   if (createdUser) {
     const [roleRow] = await db.select().from(roles).where(eq(roles.id, createdUser.roleId));
     return { ...createdUser, role: roleRow?.name };

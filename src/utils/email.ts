@@ -6,8 +6,8 @@ import env from "@/env";
 // Configura il transporter
 const transporter = nodemailer.createTransport({
   host: "smtp.gmail.com", // Host esplicito di Gmail
-  port: 465,              // Porta standard per SSL
-  secure: true,           // Usa SSL/TLS esplicito (Risolve S5332)
+  port: 465, // Porta standard per SSL
+  secure: true, // Usa SSL/TLS esplicito (Risolve S5332)
   auth: {
     user: env.GMAIL_USER,
     pass: env.GMAIL_APP_PASSWORD, // Password specifica per le app
@@ -47,6 +47,7 @@ export async function sendInviteEmail(email: string, token: string) {
 
   try {
     await transporter.sendMail(mailOptions);
+    // eslint-disable-next-line no-console
     console.log("Email di invito inviata con successo");
   }
   catch (error) {
@@ -54,7 +55,6 @@ export async function sendInviteEmail(email: string, token: string) {
     throw new Error("Impossibile inviare l'email di invito");
   }
 }
-
 
 /**
  * Invia email di notifica all'agente quando viene richiesta una visita
@@ -64,17 +64,18 @@ export async function sendAppointmentNotificationEmail(
   userName: string,
   propertyTitle: string,
   appointmentDate: Date,
-  appointmentId: number
+  _appointmentId: number, // Prefisso _ per indicare parametro non usato
 ): Promise<void> {
-  if (!agentEmail) return;
-  
-  const formattedDate = appointmentDate.toLocaleString('it-IT', {
-    weekday: 'long',
-    year: 'numeric',
-    month: 'long',
-    day: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit'
+  if (!agentEmail)
+    return;
+
+  const formattedDate = appointmentDate.toLocaleString("it-IT", {
+    weekday: "long",
+    year: "numeric",
+    month: "long",
+    day: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
   });
 
   const subject = `Nuova richiesta di visita per ${propertyTitle}`;
@@ -97,17 +98,18 @@ export async function sendAppointmentConfirmationEmail(
   userEmail: string | undefined,
   propertyTitle: string,
   appointmentDate: Date,
-  notes: string
+  notes: string,
 ): Promise<void> {
-  if (!userEmail) return;
+  if (!userEmail)
+    return;
 
-  const formattedDate = appointmentDate.toLocaleString('it-IT', {
-    weekday: 'long',
-    year: 'numeric',
-    month: 'long',
-    day: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit'
+  const formattedDate = appointmentDate.toLocaleString("it-IT", {
+    weekday: "long",
+    year: "numeric",
+    month: "long",
+    day: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
   });
 
   const subject = `Visita confermata per ${propertyTitle}`;
@@ -116,7 +118,7 @@ export async function sendAppointmentConfirmationEmail(
     <p>Gentile cliente,</p>
     <p>Siamo lieti di confermare la tua visita per l'immobile "<strong>${propertyTitle}</strong>".</p>
     <p>Data e ora: <strong>${formattedDate}</strong></p>
-    ${notes ? `<p>Note aggiuntive: ${notes}</p>` : ''}
+    ${notes ? `<p>Note aggiuntive: ${notes}</p>` : ""}
     <p>Ti aspettiamo!</p>
     <p>Cordiali saluti,<br>Team DietiDeals24</p>
   `;
@@ -131,17 +133,18 @@ export async function sendAppointmentRejectionEmail(
   userEmail: string | undefined,
   propertyTitle: string,
   appointmentDate: Date,
-  notes: string
+  notes: string,
 ): Promise<void> {
-  if (!userEmail) return;
+  if (!userEmail)
+    return;
 
-  const formattedDate = appointmentDate.toLocaleString('it-IT', {
-    weekday: 'long',
-    year: 'numeric',
-    month: 'long',
-    day: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit'
+  const formattedDate = appointmentDate.toLocaleString("it-IT", {
+    weekday: "long",
+    year: "numeric",
+    month: "long",
+    day: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
   });
 
   const subject = `Visita non disponibile per ${propertyTitle}`;
@@ -150,7 +153,7 @@ export async function sendAppointmentRejectionEmail(
     <p>Gentile cliente,</p>
     <p>Ci dispiace informarti che la tua richiesta di visita per l'immobile "<strong>${propertyTitle}</strong>" 
        prevista per <strong>${formattedDate}</strong> non può essere confermata.</p>
-    ${notes ? `<p>Motivazione: ${notes}</p>` : ''}
+    ${notes ? `<p>Motivazione: ${notes}</p>` : ""}
     <p>Ti invitiamo a selezionare una nuova data e ora per la tua visita.</p>
     <p>Cordiali saluti,<br>Team DietiDeals24</p>
   `;
@@ -162,12 +165,13 @@ async function sendEmail(userEmail: string, subject: string, html: string): Prom
   const mailOptions = {
     from: env.EMAIL_FROM,
     to: userEmail,
-    subject: subject,
-    html: html
+    subject,
+    html,
   };
 
   try {
     await transporter.sendMail(mailOptions);
+    // eslint-disable-next-line no-console
     console.log(`Email inviata con successo a ${userEmail}`);
   }
   catch (error) {
@@ -175,4 +179,3 @@ async function sendEmail(userEmail: string, subject: string, html: string): Prom
     throw new Error(`Impossibile inviare l'email a ${userEmail}`);
   }
 }
-

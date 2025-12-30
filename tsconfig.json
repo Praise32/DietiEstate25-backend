@@ -1,24 +1,43 @@
 {
   "compilerOptions": {
-    "target": "ESNext",
+    "target": "ES2022",
+    "lib": [
+      "ES2022"
+    ],
     "baseUrl": ".",
-    "module": "ESNext",
-    "moduleResolution": "node", // Change this to "node"
+    "rootDir": ".",
+    "module": "ES2022",
+    "moduleResolution": "bundler",
     "paths": {
       "@/*": [
         "src/*"
       ]
     },
-    "typeRoots": ["node_modules/@types", "@types"],
+    "resolveJsonModule": true,
     "types": [
       "node",
       "jest"
     ],
+    "allowJs": true,
     "strict": true,
+    "noImplicitReturns": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
     "outDir": "./dist",
-    "esModuleInterop": true, // Add this for proper module imports
+    "removeComments": true,
+    "esModuleInterop": true,
+    "forceConsistentCasingInFileNames": true,
     "skipLibCheck": true
   },
+  "include": [
+    "src/**/*",
+    "@types/**/*"
+  ],
+  "exclude": [
+    "node_modules",
+    "dist",
+    "coverage"
+  ],
   "tsc-alias": {
     "resolveFullPaths": true
   }

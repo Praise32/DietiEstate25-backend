@@ -10,24 +10,28 @@ export interface GeocodeResult {
  * Geocoding usando Nominatim (OpenStreetMap)
  */
 export async function geocodeAddress(
-  address: string, 
-  city: string, 
-  cap: string
+  address: string,
+  city: string,
+  cap: string,
 ): Promise<GeocodeResult | null> {
   try {
     const query = `${address}, ${cap} ${city}, Italy`;
-    
-    const response = await axios.get('https://nominatim.openstreetmap.org/search', {
+
+    const response = await axios.get<Array<{
+      lat: string;
+      lon: string;
+      display_name: string;
+    }>>("https://nominatim.openstreetmap.org/search", {
       params: {
         q: query,
-        format: 'json',
+        format: "json",
         limit: 1,
-        countrycodes: 'it', // Limita all'Italia
-        addressdetails: 1
+        countrycodes: "it",
+        addressdetails: 1,
       },
       headers: {
-        'User-Agent': 'DietiDeals24-Backend/1.0' // Richiesto da Nominatim
-      }
+        "User-Agent": "DietiDeals24-Backend/1.0",
+      },
     });
 
     if (response.data && response.data.length > 0) {
@@ -35,14 +39,14 @@ export async function geocodeAddress(
       return {
         latitude: Number.parseFloat(result.lat),
         longitude: Number.parseFloat(result.lon),
-        formattedAddress: result.display_name
+        formattedAddress: result.display_name,
       };
     }
 
     return null;
-  } catch (error) {
-    console.error('Errore durante il geocoding:', error);
+  }
+  catch (error) {
+    console.error("Errore durante il geocoding:", error);
     return null;
   }
 }
-

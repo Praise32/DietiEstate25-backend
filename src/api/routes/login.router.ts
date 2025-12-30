@@ -10,7 +10,6 @@ import env from "@/env";
 import * as loginRepositoy from "@/repository/login.repository";
 import passport from "@/utils/passport";
 
-
 const router = express.Router();
 
 router.post(
@@ -42,16 +41,16 @@ router.post(
 
       res.json({ token });
     }
-    catch (error: any) {
-      // Gestione errore unique constraint (Postgres/Drizzle)
+    catch (error) {
       if (
-        error.code === "23505" // Postgres unique_violation
-        || (error.message?.includes("unique"))
+        error instanceof Error
+        && (
+          (error as { code?: string }).code === "23505"
+          || error.message?.includes("unique")
+        )
       ) {
-        // Cerca il campo che ha causato il conflitto nel messaggio di errore
         let field = "campo";
-        const detail = error.detail || error.message;
-        // Esempio di detail: 'Key (email)=(test@example.com) already exists.'
+        const detail = (error as { detail?: string }).detail || error.message;
         const match = detail?.match(/\(([^)]{1,100})\)=/);
         if (match?.[1]) {
           field = match[1];
@@ -61,7 +60,6 @@ router.post(
           .json({ message: `Il campo '${field}' è già stato usato.` });
         return;
       }
-      // Altri errori
       res.status(500).json({ message: "Errore interno del server." });
     }
   },
@@ -84,31 +82,24 @@ router.get(
     failureRedirect: "/login",
   }),
   async (req, res) => {
+    const user = req.user;
+    if (!user?.id || !user?.name || !user?.email || !user?.role) {
+      res.status(401).json({ message: "Autenticazione fallita" });
+      return;
+    }
+
     const token = jwt.sign(
       {
-        id: req.user!.id,
-        name: req.user!.name,
-        email: req.user!.email,
-        role: req.user!.role,
+        id: user.id,
+        name: user.name,
+        email: user.email,
+        role: user.role,
       },
       env.JWT_SECRET_KEY,
       { expiresIn: "24h" },
     );
 
-    // Redirect al frontend con il token
     res.redirect(`${env.FRONTEND_URL}/auth/google/callback?token=${token}`);
-
-    /* Prova senza frontend
-    res.json({
-      message: "Autenticazione Google riuscita",
-      token,
-      user: {
-        id: req.user!.id,
-        name: req.user!.name,
-        email: req.user!.email,
-      },
-    });
-      */
   },
 );
 
@@ -117,12 +108,18 @@ router.post(
   validate({ body: userLoginSchema }),
   passport.authenticate("local", { session: false }),
   async (req, res) => {
+    const user = req.user;
+    if (!user?.id || !user?.name || !user?.email || !user?.role) {
+      res.status(401).json({ message: "Autenticazione fallita" });
+      return;
+    }
+
     const token = jwt.sign(
       {
-        id: req.user!.id,
-        name: req.user!.name,
-        email: req.user!.email,
-        role: req.user!.role,
+        id: user.id,
+        name: user.name,
+        email: user.email,
+        role: user.role,
       },
       env.JWT_SECRET_KEY,
       { expiresIn: "24h" },

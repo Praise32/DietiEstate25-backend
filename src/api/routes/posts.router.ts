@@ -18,7 +18,7 @@ import * as photoRepository from "@/repository/photos.repository";
 import * as postsRepository from "@/repository/posts.repository";
 import * as userRepository from "@/repository/user.repository";
 import passport from "@/utils/passport";
-import { formatWeatherData, getWeatherForecast } from "@/utils/weatherService";
+import { formatWeatherData, getWeatherForecast } from "@/utils/weather-service";
 
 import { authMiddleware, isOwnerMiddlewarePosts } from "../middleware/auth.middleware";
 
@@ -51,11 +51,11 @@ router.get("/:id", validate({ params: postIdSchema }), async (req, res) => {
 });
 
 router.get("/", (async (req: Request, res: Response) => {
-  // Validare i query params con lo schema Zod
   const validation = searchFiltersSchema.safeParse(req.query);
 
   if (!validation.success) {
-    return res.status(400).json({ errors: validation.error.issues });
+    res.status(400).json({ errors: validation.error.issues });
+    return;
   }
 
   const filters = validation.data;
@@ -64,16 +64,12 @@ router.get("/", (async (req: Request, res: Response) => {
     let posts;
     let total;
 
-    // Estrai i parametri di paginazione e geografici
     const { page, limit, latitude, longitude, radius, ...otherFilters } = filters;
 
-    // Se ci sono parametri geografici, usa la ricerca nelle vicinanze
     if (latitude !== undefined && longitude !== undefined && radius !== undefined) {
-      // Controlla se ci sono altri filtri
       const hasOtherFilters = Object.values(otherFilters).some(value => value !== undefined);
 
       if (hasOtherFilters) {
-        // Ricerca geografica con filtri aggiuntivi
         posts = await postsRepository.getPostsNearbyWithFilters(
           latitude,
           longitude,
@@ -91,7 +87,6 @@ router.get("/", (async (req: Request, res: Response) => {
         );
       }
       else {
-        // Solo ricerca geografica
         posts = await postsRepository.getPostsNearby(
           latitude,
           longitude,
@@ -108,12 +103,10 @@ router.get("/", (async (req: Request, res: Response) => {
       }
     }
     else {
-      // Ricerca normale con filtri
       posts = await postsRepository.getAllPosts(filters);
       total = await postsRepository.countAllPosts(otherFilters);
     }
 
-    // Arricchisci con le foto
     const postsWithPhotos = await Promise.all(
       posts.map(async (post) => {
         const photos = await photoRepository.getAllPhotoByPostId(post.id);
@@ -127,25 +120,28 @@ router.get("/", (async (req: Request, res: Response) => {
       }),
     );
 
-    const response: any = {
+    const response: {
+      data: typeof postsWithPhotos;
+      page: number;
+      limit: number;
+      total: number;
+      totalPages: number;
+      searchCenter?: { latitude: number; longitude: number };
+      searchRadius?: number;
+      searchType: string;
+    } = {
       data: postsWithPhotos,
       page: filters.page,
       limit: filters.limit,
       total,
       totalPages: Math.ceil(total / filters.limit),
+      searchType: "standard",
     };
 
-    // Aggiungi info geografiche se presenti
     if (latitude !== undefined && longitude !== undefined && radius !== undefined) {
-      response.searchCenter = {
-        latitude,
-        longitude,
-      };
+      response.searchCenter = { latitude, longitude };
       response.searchRadius = radius;
       response.searchType = "nearby";
-    }
-    else {
-      response.searchType = "standard";
     }
 
     res.status(200).json(response);
@@ -156,32 +152,31 @@ router.get("/", (async (req: Request, res: Response) => {
   }
 }) as RequestHandler);
 
-// ...existing code...
-
 router.post("/", passport.authenticate("jwt", { session: false }), validate({ body: postInsertSchema }), async (req, res) => {
   try {
-    // Recupera i dati dell'utente per ottenere la sua agenzia
-    const user = await userRepository.getUserById(req.user!.id!);
+    const userId = req.user?.id;
+    if (!userId) {
+      res.status(401).json({ message: "Utente non autenticato" });
+      return;
+    }
+
+    const user = await userRepository.getUserById(userId);
 
     if (!user) {
       res.status(404).json({ message: "Utente non trovato" });
       return;
     }
 
-    // Crea il post con userId e agencyId (se l'utente appartiene a un'agenzia)
-    const PostInsert = await postsRepository.createPost({
+    const postInsert = await postsRepository.createPost({
       ...req.body,
-      userId: req.user!.id!,
-      agencyId: user.agencyId || null, // Aggiungi l'agencyId se l'utente appartiene a un'agenzia
+      userId,
+      agencyId: user.agencyId || null,
     });
 
-    res.status(201).json(PostInsert);
+    res.status(201).json(postInsert);
   }
-  catch (error: any) {
-    console.error("Errore durante la creazione del post:", error);
-
-    // Gestisci errori specifici del geocoding
-    if (error.message?.includes("geocodificare")) {
+  catch (error) {
+    if (error instanceof Error && error.message.includes("geocodificare")) {
       res.status(400).json({
         message: "Indirizzo non valido o non trovato. Verifica che via, città e CAP siano corretti.",
         details: error.message,
@@ -189,6 +184,7 @@ router.post("/", passport.authenticate("jwt", { session: false }), validate({ bo
       return;
     }
 
+    console.error("Errore durante la creazione del post:", error);
     res.status(500).json({ message: "Errore interno del server" });
   }
 });
@@ -231,18 +227,32 @@ router.put("/:id", authMiddleware, isOwnerMiddlewarePosts, async (req, res) => {
     return;
   }
 
-  const Post = await postsRepository.updatePost(req.posts!.id, putBody.data);
-  if (!Post) {
+  const postId = req.posts?.id;
+  if (!postId) {
+    res.status(404).json({ message: "Post non trovato" });
+    return;
+  }
+
+  const updatedPost = await postsRepository.updatePost(postId, putBody.data);
+  if (!updatedPost) {
     res.status(404).end();
     return;
   }
 
-  res.json(Post);
+  res.json(updatedPost);
 });
 
 router.post("/:id/upload", authMiddleware, isOwnerMiddlewarePosts, upload.array("imageFiles", 5), async (req, res) => {
   if (!req.files || (req.files as Express.Multer.File[]).length === 0) {
     res.status(400).json({ message: "Nessun file caricato." });
+    return;
+  }
+
+  const userId = req.user?.id;
+  const postId = req.posts?.id;
+
+  if (!userId || !postId) {
+    res.status(401).json({ message: "Utente o post non trovato" });
     return;
   }
 
@@ -260,13 +270,44 @@ router.post("/:id/upload", authMiddleware, isOwnerMiddlewarePosts, upload.array(
     const photo = await photoRepository.createPhoto({
       url: file.url,
       filename: file.fileName,
-      userId: req.user!.id!,
-      postsId: req.posts!.id,
+      userId,
+      postsId: postId,
     });
     photos.push(photo);
   }
   res.status(201).json(photos);
 });
+
+// Helper function per verificare autorizzazione eliminazione foto
+async function checkPhotoDeleteAuthorization(
+  currentUser: Express.User,
+  photo: { userId: number },
+  post: { userId: number; agencyId: number | null },
+): Promise<boolean> {
+  // Admin e Support possono eliminare qualsiasi foto
+  if (currentUser.role === "admin" || currentUser.role === "support") {
+    return true;
+  }
+
+  // Il proprietario della foto può eliminarla
+  if (photo.userId === currentUser.id) {
+    return true;
+  }
+
+  // Il proprietario del post può eliminare le foto
+  if (post.userId === currentUser.id) {
+    return true;
+  }
+
+  // Manager può eliminare foto dei post della propria agenzia
+  if (currentUser.role === "manager" && post.agencyId !== null && currentUser.id) {
+    const agenciesRepository = await import("@/repository/agencies.repository");
+    const managerAgency = await agenciesRepository.getAgencyByManagerId(currentUser.id);
+    return !!(managerAgency && managerAgency.id === post.agencyId);
+  }
+
+  return false;
+}
 
 router.delete("/photos/:id", passport.authenticate("jwt", { session: false }), async (req, res) => {
   const photoId = Number(req.params.id);
@@ -275,63 +316,41 @@ router.delete("/photos/:id", passport.authenticate("jwt", { session: false }), a
     return;
   }
 
-  // Recupera la foto dal DB
   const photo = await photoRepository.getPhotoById(photoId);
   if (!photo) {
     res.status(404).json({ message: "Foto non trovata." });
     return;
   }
 
-  // Recupera il post per verificare i permessi
   const post = await postsRepository.getPostById(photo.postsId);
   if (!post) {
     res.status(404).json({ message: "Post non trovato." });
     return;
   }
 
-  // Verifica i permessi
-  let isAuthorized = false;
-  const currentUser = req.user!;
+  const currentUser = req.user;
+  if (!currentUser) {
+    res.status(401).json({ message: "Utente non autenticato" });
+    return;
+  }
 
-  // Admin e Support possono eliminare qualsiasi foto
-  if (currentUser.role === "admin" || currentUser.role === "support") {
-    isAuthorized = true;
-  }
-  // Il proprietario della foto può eliminarla
-  else if (photo.userId === currentUser.id) {
-    isAuthorized = true;
-  }
-  // Il proprietario del post può eliminare le foto
-  else if (post.userId === currentUser.id) {
-    isAuthorized = true;
-  }
-  // Manager può eliminare foto dei post della propria agenzia
-  else if (currentUser.role === "manager" && post.agencyId !== null) {
-    const agenciesRepository = await import("@/repository/agencies.repository");
-    const managerAgency = await agenciesRepository.getAgencyByManagerId(currentUser.id!);
-    if (managerAgency && managerAgency.id === post.agencyId) {
-      isAuthorized = true;
-    }
-  }
+  const isAuthorized = await checkPhotoDeleteAuthorization(currentUser, photo, post);
 
   if (!isAuthorized) {
     res.status(403).json({ message: "Non sei autorizzato a eliminare questa foto." });
     return;
   }
 
-  // Elimina dal DB
   const deleted = await photoRepository.deletePhoto(photoId);
   if (!deleted) {
     res.status(500).json({ message: "Errore durante l'eliminazione della foto dal database." });
     return;
   }
 
-  // Elimina da S3
   try {
     await deleteFileFromS3(photo.filename);
   }
   catch (err) {
-    // Logga ma non blocca la risposta
     console.error("Errore durante l'eliminazione da S3:", err);
   }
 
@@ -347,7 +366,6 @@ const weatherQuerySchema = z.object({
 // Ottieni previsioni meteo per un immobile (con coordinate obbligatorie dal frontend)
 router.get("/:id/weather", async (req: Request, res: Response) => {
   try {
-    // Validazione manuale dei parametri
     const paramValidation = postIdSchema.safeParse(req.params);
     if (!paramValidation.success) {
       res.status(400).json({
@@ -369,7 +387,6 @@ router.get("/:id/weather", async (req: Request, res: Response) => {
     const { id: postId } = paramValidation.data;
     const { days, latitude, longitude } = queryValidation.data;
 
-    // Verifica che l'immobile esista
     const [post] = await db
       .select({
         id: posts.id,
@@ -384,9 +401,9 @@ router.get("/:id/weather", async (req: Request, res: Response) => {
       return;
     }
 
+    // eslint-disable-next-line no-console
     console.log(`Coordinate dal frontend per post ${postId}: lat=${latitude}, lon=${longitude}`);
 
-    // Ottieni previsioni meteo con le coordinate fornite
     const forecast = await getWeatherForecast(
       latitude,
       longitude,

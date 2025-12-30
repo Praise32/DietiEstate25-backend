@@ -1,22 +1,20 @@
 import express from "express";
 import validate from "express-zod-safe";
 
+import { getPresignedUrl } from "@/api/middleware/photo.middleware";
 import { agenciesIdSchema, agenciesInsertSchema, agenciesUpdateSchema } from "@/db/schema/agencies";
 import * as agenciesRepository from "@/repository/agencies.repository";
+import * as photoRepository from "@/repository/photos.repository";
 import * as postsRepository from "@/repository/posts.repository";
 import * as userRepository from "@/repository/user.repository";
-import * as photoRepository from "@/repository/photos.repository";
 
 import { authMiddleware } from "../middleware/auth.middleware";
 import { requireRole } from "../middleware/role.middleware";
-import { getPresignedUrl } from "@/api/middleware/photo.middleware";
-
-
 
 const router = express.Router();
 
 // GET tutte le agenzie
-router.get("/", async (req, res) => {
+router.get("/", async (_req, res) => {
   try {
     const agencies = await agenciesRepository.getAgenciesWithManagers();
     res.status(200).json(agencies);
@@ -28,7 +26,7 @@ router.get("/", async (req, res) => {
 });
 
 // GET agenti senza agenzia (solo admin e support)
-router.get("/unassigned-agents", authMiddleware, requireRole("admin", "support"), async (req, res) => {
+router.get("/unassigned-agents", authMiddleware, requireRole("admin", "support"), async (_req, res) => {
   try {
     const unassignedAgents = await agenciesRepository.getUnassignedAgents();
     res.status(200).json(unassignedAgents);
@@ -209,7 +207,7 @@ router.get("/:id/properties", validate({ params: agenciesIdSchema }), async (req
     }
 
     const posts = await postsRepository.getPostsByAgencyId(agencyId);
-    
+
     // Aggiungi le foto a ogni post con presigned URLs
     const postsWithPhotos = await Promise.all(
       posts.map(async (post) => {
@@ -363,7 +361,7 @@ router.delete(
   requireRole("admin", "support"),
   async (req, res) => {
     const agencyId = Number(req.params.id);
-    
+
     try {
       const agency = await agenciesRepository.getAgencyById(agencyId);
       if (!agency) {
@@ -379,15 +377,15 @@ router.delete(
       // Rimuovi il manager
       await agenciesRepository.removeManagerFromAgency(agencyId, agency.managerId);
 
-      res.status(200).json({ 
-        message: "Manager rimosso con successo. L'agenzia è ora orfana e in attesa di un nuovo manager." 
+      res.status(200).json({
+        message: "Manager rimosso con successo. L'agenzia è ora orfana e in attesa di un nuovo manager.",
       });
-    } catch (error) {
+    }
+    catch (error) {
       console.error("Errore rimozione manager:", error);
       res.status(500).json({ message: "Errore interno del server" });
     }
-  }
+  },
 );
-
 
 export default router;

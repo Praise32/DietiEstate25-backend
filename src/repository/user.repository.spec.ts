@@ -1,5 +1,6 @@
 import { db } from "@/db";
 import user from "@/db/schema/user";
+
 import { updatePassword } from "./user.repository";
 
 // Mock di db
@@ -9,7 +10,7 @@ jest.mock("@/db", () => ({
   },
 }));
 
-describe("User Repository - updatePassword", () => {
+describe("user Repository - updatePassword", () => {
   beforeEach(() => {
     jest.clearAllMocks();
   });

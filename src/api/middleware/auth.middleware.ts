@@ -47,10 +47,9 @@ export async function authMiddleware(
         name: decodedToken.name || null,
         email: decodedToken.email || null,
         role: decodedToken.role,
-        // Aggiungi altri campi richiesti da UserSelectSchema se necessari
-        phone: "",
+        phone: null, // phone può essere null
         password: "",
-        roleId: 0, // Questi non sono usati quando il ruolo è nel token
+        roleId: 0,
         agencyId: null,
         hasCreatedAgency: false,
         createdAt: "",
@@ -67,10 +66,7 @@ export async function authMiddleware(
       return;
     }
 
-    req.user = {
-      ...userFound,
-      role: userFound.role ?? undefined,
-    };
+    req.user = userFound;
 
     next();
   });
@@ -87,14 +83,18 @@ export async function isOwnerMiddlewarePosts(
     res.status(400).json(updatePost.error).end();
     return;
   }
-  
+
   const foundPost = await postsRepository.getPostById(updatePost.data.id);
   if (!foundPost) {
     res.status(404).end();
     return;
   }
 
-  const currentUser = req.user!;
+  const currentUser = req.user;
+  if (!currentUser) {
+    res.status(401).json({ message: "Utente non autenticato" }).end();
+    return;
+  }
 
   // Admin e Support possono modificare/eliminare qualsiasi post
   if (currentUser.role === "admin" || currentUser.role === "support") {
@@ -109,13 +109,13 @@ export async function isOwnerMiddlewarePosts(
     next();
     return;
   }
+
   // Manager può modificare/eliminare post della propria agenzia
   if (currentUser.role === "manager" && foundPost.agencyId !== null && currentUser.id) {
-    // Importa il repository all'inizio del file se non già fatto
     const agenciesRepository = await import("@/repository/agencies.repository");
     const managerAgency = await agenciesRepository.getAgencyByManagerId(currentUser.id);
-    
-    if (managerAgency && managerAgency.id === foundPost.agencyId) {
+
+    if (managerAgency?.id === foundPost.agencyId) {
       req.posts = foundPost;
       next();
       return;

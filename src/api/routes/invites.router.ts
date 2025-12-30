@@ -32,7 +32,7 @@ function checkAuthorization(userRole: string, targetRole: string): boolean {
 // Helper estratto: Logica per invitare un MANAGER
 async function resolveManagerInvite(
   userRole: string,
-  requestedAgencyId?: number
+  requestedAgencyId?: number,
 ): Promise<{ finalAgencyId: number | null; error?: { status: number; message: string } }> {
   // Solo Admin e Support possono invitare manager
   if (userRole !== "admin" && userRole !== "support") {
@@ -55,8 +55,8 @@ async function resolveManagerInvite(
       finalAgencyId: null,
       error: {
         status: 409,
-        message: `L'agenzia '${agency.name}' ha già un manager assegnato. Rimuoverlo prima di invitarne uno nuovo.`
-      }
+        message: `L'agenzia '${agency.name}' ha già un manager assegnato. Rimuoverlo prima di invitarne uno nuovo.`,
+      },
     };
   }
 
@@ -67,9 +67,8 @@ async function resolveManagerInvite(
 async function resolveAgentInvite(
   userRole: string,
   userId: number,
-  requestedAgencyId?: number
+  requestedAgencyId?: number,
 ): Promise<{ finalAgencyId: number | null; error?: { status: number; message: string } }> {
-  
   if (userRole === "manager") {
     const managerAgency = await agenciesRepository.getAgencyByManagerId(userId);
     if (!managerAgency) {
@@ -101,7 +100,6 @@ async function resolveAgencyId(
   targetRole: string,
   requestedAgencyId?: number,
 ): Promise<{ finalAgencyId: number | null; error?: { status: number; message: string } }> {
-
   if (targetRole === "manager") {
     return resolveManagerInvite(userRole, requestedAgencyId);
   }
@@ -180,11 +178,10 @@ router.post(
 );
 
 // Nuova route per ottenere tutte le agenzie disponibili (per admin e support)
-router.get("/agencies", authMiddleware, requireRole("admin", "support"), async (req, res) => {
+router.get("/agencies", authMiddleware, requireRole("admin", "support"), async (_req, res) => {
   try {
     const agencies = await agenciesRepository.getAllAgencies();
 
-    // Restituisci solo le informazioni necessarie per la selezione
     const agenciesForSelection = agencies.map(agency => ({
       id: agency.id,
       name: agency.name,
@@ -204,7 +201,6 @@ router.get("/validate/:token", async (req, res) => {
   const { token } = req.params;
 
   try {
-    // Verifica se l'invito esiste nel database
     const invite = await inviteRepository.getInviteByToken(token);
 
     if (!invite || invite.used || new Date(invite.expiresAt) < new Date()) {
@@ -215,8 +211,10 @@ router.get("/validate/:token", async (req, res) => {
       return;
     }
 
-    // Decodifica il token per ottenere le informazioni
-    const decoded = jwt.verify(token, env.JWT_SECRET_KEY) as any;
+    const decoded = jwt.verify(token, env.JWT_SECRET_KEY) as {
+      email: string;
+      role: string;
+    };
 
     res.json({
       valid: true,
@@ -233,7 +231,6 @@ router.get("/validate/:token", async (req, res) => {
   }
 });
 
-// Route per la registrazione tramite invito
 router.post("/register/:token", async (req, res) => {
   const { token } = req.params;
   const { password, name, phone } = req.body;
@@ -254,7 +251,9 @@ router.post("/register/:token", async (req, res) => {
   // Decodifica il token per ottenere l'agencyId se presente
   let agencyId = null;
   try {
-    const decoded = jwt.verify(token, env.JWT_SECRET_KEY) as any;
+    const decoded = jwt.verify(token, env.JWT_SECRET_KEY) as {
+      agencyId?: number | null;
+    };
     agencyId = decoded.agencyId || null;
   }
   catch (error) {

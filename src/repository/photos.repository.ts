@@ -16,7 +16,8 @@ export async function getPhotoById(id: number) {
 }
 
 export async function deletePhoto(id: number) {
-  return await db.delete(photos).where(eq(photos.id, id)).returning();
+  const deletedPhotos = await db.delete(photos).where(eq(photos.id, id)).returning();
+  return deletedPhotos;
 }
 
 export async function getAllPhotoByPostId(id: number) {

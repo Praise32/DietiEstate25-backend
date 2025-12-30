@@ -71,14 +71,17 @@ router.post("/", authMiddleware, validate({ body: appointmentApiSchema }), async
 // Ottieni appuntamenti (differenziati per ruolo)
 router.get("/", authMiddleware, async (req: Request, res: Response) => {
   try {
-    if (!req.user?.id) {
+    const userId = req.user?.id;
+    const userRole = req.user?.role;
+
+    if (!userId || !userRole) {
       res.status(401).json({ message: "Utente non autenticato" });
       return;
     }
 
-    let appointments: any[];
+    let appointments: Array<Record<string, unknown>>;
 
-    switch (req.user.role) {
+    switch (userRole) {
       case "admin":
       case "support":
         // Admin e Support vedono tutti gli appuntamenti del sistema con dati agente completi
@@ -87,24 +90,21 @@ router.get("/", authMiddleware, async (req: Request, res: Response) => {
 
       case "manager": {
         // Manager vede tutti gli appuntamenti della sua agenzia con dati agente completi
-        const managerAgency = await agenciesRepository.getAgencyByManagerId(req.user.id);
-        if (managerAgency) {
-          appointments = await appointmentsRepository.getAppointmentsByAgencyId(managerAgency.id);
-        }
-        else {
-          appointments = [];
-        }
+        const managerAgency = await agenciesRepository.getAgencyByManagerId(userId);
+        appointments = managerAgency
+          ? await appointmentsRepository.getAppointmentsByAgencyId(managerAgency.id)
+          : [];
         break;
       }
 
       case "agent":
         // Agente vede solo i suoi appuntamenti
-        appointments = await appointmentsRepository.getAppointmentsByAgentId(req.user.id);
+        appointments = await appointmentsRepository.getAppointmentsByAgentId(userId);
         break;
 
       default:
         // Cliente vede solo i suoi appuntamenti
-        appointments = await appointmentsRepository.getAppointmentsByUserId(req.user.id);
+        appointments = await appointmentsRepository.getAppointmentsByUserId(userId);
         break;
     }
 
@@ -115,6 +115,80 @@ router.get("/", authMiddleware, async (req: Request, res: Response) => {
     res.status(500).json({ message: "Errore durante il recupero degli appuntamenti" });
   }
 });
+
+// Helper per verificare autorizzazioni update
+async function checkUpdateAuthorization(
+  userRole: string,
+  userId: number,
+  appointment: { agentId: number },
+): Promise<boolean> {
+  if (userRole === "admin" || userRole === "support") {
+    return true;
+  }
+
+  if (userRole === "manager") {
+    const agent = await userRepository.getUserById(appointment.agentId);
+    if (agent) {
+      const agentAgency = await agenciesRepository.getAgencyByAgentId(agent.id);
+      const managerAgency = await agenciesRepository.getAgencyByManagerId(userId);
+      return agentAgency?.id === managerAgency?.id;
+    }
+  }
+
+  if (userRole === "agent") {
+    return appointment.agentId === userId;
+  }
+
+  return false;
+}
+
+// Helper per verificare autorizzazioni delete
+async function checkDeleteAuthorization(
+  userRole: string,
+  userId: number,
+  appointment: { agentId: number; userId: number },
+): Promise<boolean> {
+  if (userRole === "admin" || userRole === "support") {
+    return true;
+  }
+
+  if (userRole === "manager") {
+    const agent = await userRepository.getUserById(appointment.agentId);
+    if (agent) {
+      const agentAgency = await agenciesRepository.getAgencyByAgentId(agent.id);
+      const managerAgency = await agenciesRepository.getAgencyByManagerId(userId);
+      return agentAgency?.id === managerAgency?.id;
+    }
+  }
+
+  return appointment.userId === userId;
+}
+
+// Helper per inviare email appropriate
+async function sendAppointmentEmail(
+  status: string,
+  user: { email: string | null },
+  post: { title: string },
+  appointmentDate: Date,
+  notes: string,
+) {
+  if (status === "confirmed") {
+    await sendAppointmentConfirmationEmail(
+      user.email ?? undefined,
+      post.title,
+      appointmentDate,
+      notes || "",
+    );
+  }
+  else if (status === "rejected") {
+    await sendAppointmentRejectionEmail(
+      user.email ?? undefined,
+      post.title,
+      appointmentDate,
+      notes || "",
+    );
+  }
+}
 
 router.put("/:id", passport.authenticate("jwt", { session: false }), requireRole("agent", "admin", "manager", "support"), async (req: Request, res: Response) => {
   try {
@@ -132,53 +206,34 @@ router.put("/:id", passport.authenticate("jwt", { session: false }), requireRole
 
     const { status, notes } = req.body;
 
-    // Verifica che l'appuntamento esista
     const appointment = await appointmentsRepository.getAppointmentById(putID.data.id);
     if (!appointment) {
       res.status(404).json({ message: "Appuntamento non trovato" });
       return;
     }
 
-    // Controllo autorizzazioni in base al ruolo
-    let isAuthorized = false;
+    const userId = req.user?.id;
+    const userRole = req.user?.role;
 
-    if (req.user!.role === "admin" || req.user!.role === "support") {
-      // Admin e Support possono modificare tutti gli appuntamenti
-      isAuthorized = true;
+    if (!userId || !userRole) {
+      res.status(401).json({ message: "Utente non autenticato" });
+      return;
     }
-    else if (req.user!.role === "manager") {
-      // Manager può modificare appuntamenti della sua agenzia
-      const agent = await userRepository.getUserById(appointment.agentId);
-      if (agent) {
-        const agentAgency = await agenciesRepository.getAgencyByAgentId(agent.id);
-        const managerAgency = await agenciesRepository.getAgencyByManagerId(req.user!.id!);
-        isAuthorized = agentAgency?.id === managerAgency?.id;
-      }
-    }
-    else if (req.user!.role === "agent") {
-      // Agente può modificare solo i suoi appuntamenti
-      isAuthorized = appointment.agentId === req.user!.id;
-    }
+
+    const isAuthorized = await checkUpdateAuthorization(userRole, userId, appointment);
 
     if (!isAuthorized) {
       res.status(403).json({ message: "Non sei autorizzato a modificare questo appuntamento" });
       return;
     }
 
-    if (!req.user?.id) {
-      res.status(401).json({ message: "Utente non autenticato" });
-      return;
-    }
-
-    // Aggiorna lo stato dell'appuntamento (passa anche il ruolo)
     const updated = await appointmentsRepository.updateAppointmentStatus(
       Number(putID.data.id),
-      req.user.id,
+      userId,
       { status, notes },
-      req.user.role!, // Passa il ruolo per la logica nel repository
+      userRole,
     );
 
-    // Recupera informazioni per l'email
     const user = await userRepository.getUserById(appointment.userId);
     const post = await postsRepository.getPostById(appointment.postId);
 
@@ -187,23 +242,8 @@ router.put("/:id", passport.authenticate("jwt", { session: false }), requireRole
       return;
     }
 
-    // Invia email di conferma o rifiuto al cliente
-    if (status === "confirmed") {
-      await sendAppointmentConfirmationEmail(
-        user.email ?? undefined,
-        post.title,
-        new Date(appointment.requestedDate),
-        notes || "",
-      );
-    }
-    else if (status === "rejected") {
-      await sendAppointmentRejectionEmail(
-        user.email ?? undefined,
-        post.title,
-        new Date(appointment.requestedDate),
-        notes || "",
-      );
-    }
+    // Usa la helper function per inviare email
+    await sendAppointmentEmail(status, user, post, new Date(appointment.requestedDate), notes);
 
     res.status(200).json({
       message: status === "confirmed"
@@ -235,44 +275,24 @@ router.delete("/:id", authMiddleware, async (req: Request, res: Response) => {
       return;
     }
 
-    // Controllo autorizzazioni in base al ruolo
-    let isAuthorized = false;
+    const userId = req.user?.id;
+    const userRole = req.user?.role;
 
-    if (req.user!.role === "admin" || req.user!.role === "support") {
-      // Admin e Support possono eliminare tutti gli appuntamenti
-      isAuthorized = true;
+    if (!userId || !userRole) {
+      res.status(401).json({ message: "Utente non autenticato" });
+      return;
     }
-    else if (req.user!.role === "manager") {
-      // Manager può eliminare appuntamenti della sua agenzia
-      const agent = await userRepository.getUserById(appointment.agentId);
-      if (agent && req.user!.id) {
-        const agentAgency = await agenciesRepository.getAgencyByAgentId(agent.id);
-        const managerAgency = await agenciesRepository.getAgencyByManagerId(req.user!.id);
-        isAuthorized = agentAgency?.id === managerAgency?.id;
-      }
-    }
-    else if (appointment.userId === req.user!.id) {
-      // Il cliente può eliminare i suoi appuntamenti
-      isAuthorized = true;
-    }
+
+    const isAuthorized = await checkDeleteAuthorization(userRole, userId, appointment);
 
     if (!isAuthorized) {
       res.status(403).json({ message: "Non sei autorizzato a eliminare questo appuntamento" });
       return;
     }
 
-    if (!req.user?.id) {
-      res.status(401).json({ message: "Utente non autenticato" });
-      return;
-    }
-
-    if (!req.user.role) {
-      res.status(400).json({ message: "Ruolo utente non valido" });
-      return;
-    }
-
     // Elimina l'appuntamento (passa anche il ruolo)
-    await appointmentsRepository.deleteAppointment(Number(id), req.user.id, req.user.role);  }
+    await appointmentsRepository.deleteAppointment(Number(id), userId, userRole);
+  }
   catch (error) {
     console.error("Errore durante l'eliminazione dell'appuntamento:", error);
     res.status(500).json({ message: "Errore durante l'eliminazione dell'appuntamento" });
@@ -282,7 +302,10 @@ router.delete("/:id", authMiddleware, async (req: Request, res: Response) => {
 // Ottieni appuntamenti in formato calendario
 router.get("/calendar", authMiddleware, async (req: Request, res: Response) => {
   try {
-    if (!req.user?.id) {
+    const userId = req.user?.id;
+    const userRole = req.user?.role;
+
+    if (!userId || !userRole) {
       res.status(401).json({ message: "Utente non autenticato" });
       return;
     }
@@ -291,9 +314,9 @@ router.get("/calendar", authMiddleware, async (req: Request, res: Response) => {
     const start = req.query.start ? new Date(req.query.start as string) : undefined;
     const end = req.query.end ? new Date(req.query.end as string) : undefined;
 
-    let appointments: any[];
+    let appointments: Array<Record<string, unknown>>;
 
-    switch (req.user.role) {
+    switch (userRole) {
       case "admin":
       case "support":
         // Admin e Support vedono tutti gli appuntamenti del sistema
@@ -302,20 +325,17 @@ router.get("/calendar", authMiddleware, async (req: Request, res: Response) => {
 
       case "manager": {
         // Manager vede tutti gli appuntamenti della sua agenzia
-        const managerAgency = await agenciesRepository.getAgencyByManagerId(req.user.id);
-        if (managerAgency) {
-          appointments = await appointmentsRepository.getAppointmentsByAgencyIdForCalendar(managerAgency.id, start, end);
-        }
-        else {
-          appointments = [];
-        }
+        const managerAgency = await agenciesRepository.getAgencyByManagerId(userId);
+        appointments = managerAgency
+          ? await appointmentsRepository.getAppointmentsByAgencyIdForCalendar(managerAgency.id, start, end)
+          : [];
         break;
       }
 
       case "agent":
         // Agente vede solo i suoi appuntamenti
         appointments = await appointmentsRepository.getAppointmentsByAgentIdForCalendar(
-          req.user.id,
+          userId,
           start,
           end,
         );
@@ -324,7 +344,7 @@ router.get("/calendar", authMiddleware, async (req: Request, res: Response) => {
       default:
         // Cliente vede solo i suoi appuntamenti
         appointments = await appointmentsRepository.getAppointmentsByUserIdForCalendar(
-          req.user.id,
+          userId,
           start,
           end,
         );
@@ -333,10 +353,10 @@ router.get("/calendar", authMiddleware, async (req: Request, res: Response) => {
 
     // Converti gli appuntamenti in formato compatibile con i calendari
     const calendarEvents = appointments.map(app => ({
-      id: app.id.toString(),
+      id: String(app.id),
       title: app.postTitle || "Visita immobile",
       start: app.requestedDate,
-      end: new Date(new Date(app.requestedDate).getTime() + 60 * 60 * 1000), // 1 ora di default
+      end: new Date(new Date(app.requestedDate as string).getTime() + 60 * 60 * 1000),
       allDay: false,
       extendedProps: {
         status: app.status,
@@ -344,12 +364,12 @@ router.get("/calendar", authMiddleware, async (req: Request, res: Response) => {
         address: app.address,
         clientName: app.clientName,
         agentName: app.agentName,
-        agentEmail: app.agentEmail, // Aggiungi email agente
-        agentPhone: app.agentPhone, // Aggiungi telefono agente
+        agentEmail: app.agentEmail,
+        agentPhone: app.agentPhone,
         notes: app.notes,
       },
-      backgroundColor: getStatusColor(app.status),
-      borderColor: getStatusColor(app.status),
+      backgroundColor: getStatusColor(app.status as string),
+      borderColor: getStatusColor(app.status as string),
     }));
 
     res.json(calendarEvents);

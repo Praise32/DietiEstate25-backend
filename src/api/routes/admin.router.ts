@@ -56,7 +56,7 @@ router.get(
   "/",
   authMiddleware,
   requireRole("admin"),
-  async (req, res) => {
+  async (_req, res) => {
     const users = await userRepository.getAllUsersWithRoles?.();
     res.json(users);
   },
