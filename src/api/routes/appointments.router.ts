@@ -379,6 +379,34 @@ router.get("/calendar", authMiddleware, async (req: Request, res: Response) => {
     res.status(500).json({ message: "Errore interno del server" });
   }
 });
+
+// Ottieni slot occupati (pubblico/leggero)
+router.get("/slots", async (req: Request, res: Response) => {
+  try {
+    const agentId = req.query.agentId ? Number(req.query.agentId) : undefined;
+    const postId = req.query.postId ? Number(req.query.postId) : undefined;
+    const start = req.query.start ? new Date(req.query.start as string) : undefined;
+    const end = req.query.end ? new Date(req.query.end as string) : undefined;
+
+    if (!agentId && !postId) {
+      res.status(400).json({ message: "Specificare almeno agentId o postId" });
+      return;
+    }
+
+    const slots = await appointmentsRepository.getOccupiedSlots({
+      agentId,
+      postId,
+      start,
+      end,
+    });
+
+    res.json(slots);
+  } catch (error) {
+    console.error("Errore durante il recupero degli slot:", error);
+    res.status(500).json({ message: "Errore interno del server" });
+  }
+});
+
 // Funzione helper per determinare il colore in base allo stato
 function getStatusColor(status: string): string {
   switch (status) {

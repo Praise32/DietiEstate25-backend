@@ -364,3 +364,31 @@ export async function getAppointmentsByUserIdForCalendar(
     .where(and(...conditions))
     .orderBy(appointments.requestedDate);
 }
+
+// Recupero solo gli slot occupati (pubblico/leggero)
+export async function getOccupiedSlots(filters: { agentId?: number; postId?: number; start?: Date; end?: Date }) {
+  const conditions = [
+    inArray(appointments.status, ["pending", "confirmed"])
+  ];
+
+  if (filters.agentId) {
+    conditions.push(eq(appointments.agentId, filters.agentId));
+  }
+  if (filters.postId) {
+    conditions.push(eq(appointments.postId, filters.postId));
+  }
+  if (filters.start) {
+    conditions.push(sql`${appointments.requestedDate} >= ${filters.start}`);
+  }
+  if (filters.end) {
+    conditions.push(sql`${appointments.requestedDate} <= ${filters.end}`);
+  }
+
+  return await db
+    .select({
+      requestedDate: appointments.requestedDate,
+    })
+    .from(appointments)
+    .where(and(...conditions));
+}
+
