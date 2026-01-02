@@ -401,7 +401,8 @@ router.get("/slots", async (req: Request, res: Response) => {
     });
 
     res.json(slots);
-  } catch (error) {
+  }
+  catch (error) {
     console.error("Errore durante il recupero degli slot:", error);
     res.status(500).json({ message: "Errore interno del server" });
   }

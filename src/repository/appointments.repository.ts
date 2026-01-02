@@ -368,7 +368,7 @@ export async function getAppointmentsByUserIdForCalendar(
 // Recupero solo gli slot occupati (pubblico/leggero)
 export async function getOccupiedSlots(filters: { agentId?: number; postId?: number; start?: Date; end?: Date }) {
   const conditions = [
-    inArray(appointments.status, ["pending", "confirmed"])
+    inArray(appointments.status, ["pending", "confirmed"]),
   ];
 
   if (filters.agentId) {
@@ -384,11 +384,10 @@ export async function getOccupiedSlots(filters: { agentId?: number; postId?: num
     conditions.push(sql`${appointments.requestedDate} <= ${filters.end}`);
   }
 
-  return await db
+  return db
     .select({
       requestedDate: appointments.requestedDate,
     })
     .from(appointments)
     .where(and(...conditions));
 }
-
