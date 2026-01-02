@@ -87,14 +87,18 @@ export async function isOwnerMiddlewarePosts(
     res.status(400).json(updatePost.error).end();
     return;
   }
-  
+
   const foundPost = await postsRepository.getPostById(updatePost.data.id);
   if (!foundPost) {
     res.status(404).end();
     return;
   }
 
-  const currentUser = req.user!;
+  const currentUser = req.user;
+  if (!currentUser) {
+    res.status(401).json({ message: "Utente non autenticato" }).end();
+    return;
+  }
 
   // Admin e Support possono modificare/eliminare qualsiasi post
   if (currentUser.role === "admin" || currentUser.role === "support") {
@@ -114,7 +118,7 @@ export async function isOwnerMiddlewarePosts(
     // Importa il repository all'inizio del file se non già fatto
     const agenciesRepository = await import("@/repository/agencies.repository");
     const managerAgency = await agenciesRepository.getAgencyByManagerId(currentUser.id);
-    
+
     if (managerAgency && managerAgency.id === foundPost.agencyId) {
       req.posts = foundPost;
       next();
