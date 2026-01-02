@@ -15,8 +15,8 @@ import * as userRepository from "@/repository/user.repository";
 
 // Configurazione della LocalStrategy (per login email/password)
 passport.use(
-  new LocalStrategy({ usernameField: "email" }, async (email, password, done) => {
-    const user = await userRepository.getUserByEmail(email);
+  new LocalStrategy({ usernameField: "identifier" }, async (identifier, password, done) => {
+    const user = await userRepository.getUserByIdentifier(identifier);
 
     if (!user?.password) {
       return done(null, false, {
