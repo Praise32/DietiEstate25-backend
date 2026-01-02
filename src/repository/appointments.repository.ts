@@ -365,6 +365,26 @@ export async function getAppointmentsByUserIdForCalendar(
     .orderBy(appointments.requestedDate);
 }
 
+// Riprogrammazione appuntamento
+export async function rescheduleAppointment(id: number, newDate: Date, notes?: string) {
+  const updateData: { requestedDate: Date; notes?: string; updatedAt: Date } = {
+    requestedDate: newDate,
+    updatedAt: new Date(),
+  };
+
+  if (notes !== undefined) {
+    updateData.notes = notes;
+  }
+
+  const [updated] = await db
+    .update(appointments)
+    .set(updateData)
+    .where(eq(appointments.id, id))
+    .returning();
+
+  return updated;
+}
+
 // Recupero solo gli slot occupati (pubblico/leggero)
 export async function getOccupiedSlots(filters: { agentId?: number; postId?: number; start?: Date; end?: Date }) {
   const conditions = [

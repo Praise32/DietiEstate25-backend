@@ -161,6 +161,52 @@ export async function sendAppointmentRejectionEmail(
   await sendEmail(userEmail, subject, html);
 }
 
+/**
+ * Invia email di notifica al cliente quando l'appuntamento viene riprogrammato
+ */
+export async function sendAppointmentRescheduledEmail(
+  userEmail: string | undefined,
+  propertyTitle: string,
+  oldDate: Date,
+  newDate: Date,
+  notes?: string,
+): Promise<void> {
+  if (!userEmail)
+    return;
+
+  const formattedOldDate = oldDate.toLocaleString("it-IT", {
+    weekday: "long",
+    year: "numeric",
+    month: "long",
+    day: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+
+  const formattedNewDate = newDate.toLocaleString("it-IT", {
+    weekday: "long",
+    year: "numeric",
+    month: "long",
+    day: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+
+  const subject = `Modifica appuntamento per ${propertyTitle}`;
+  const html = `
+    <h1>Appuntamento Modificato</h1>
+    <p>Gentile cliente,</p>
+    <p>Il tuo appuntamento per l'immobile "<strong>${propertyTitle}</strong>" è stato modificato.</p>
+    <p>Data precedente: <strike>${formattedOldDate}</strike></p>
+    <p>Nuova data: <strong>${formattedNewDate}</strong></p>
+    ${notes ? `<p>Note: ${notes}</p>` : ""}
+    <p>Se la nuova data non è adatta alle tue esigenze, ti preghiamo di contattarci.</p>
+    <p>Cordiali saluti,<br>Team DietiDeals24</p>
+  `;
+
+  await sendEmail(userEmail, subject, html);
+}
+
 async function sendEmail(userEmail: string, subject: string, html: string): Promise<void> {
   const mailOptions = {
     from: env.EMAIL_FROM,

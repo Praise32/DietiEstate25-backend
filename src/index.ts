@@ -21,7 +21,7 @@ const corsOptions = {
     "http://localhost:4200",
     "https://accounts.google.com",
   ],
-  methods: ["GET", "POST", "PUT", "DELETE"],
+  methods: ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
   allowedHeaders: ["Content-Type", "Authorization"],
   credentials: true,
 };

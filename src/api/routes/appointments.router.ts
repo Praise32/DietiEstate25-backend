@@ -14,7 +14,7 @@ import * as agenciesRepository from "@/repository/agencies.repository";
 import * as appointmentsRepository from "@/repository/appointments.repository";
 import * as postsRepository from "@/repository/posts.repository";
 import * as userRepository from "@/repository/user.repository";
-import { sendAppointmentConfirmationEmail, sendAppointmentNotificationEmail, sendAppointmentRejectionEmail } from "@/utils/email";
+import { sendAppointmentConfirmationEmail, sendAppointmentNotificationEmail, sendAppointmentRejectionEmail, sendAppointmentRescheduledEmail } from "@/utils/email";
 import passport from "@/utils/passport";
 
 const router = express.Router();
@@ -255,6 +255,71 @@ router.put("/:id", passport.authenticate("jwt", { session: false }), requireRole
   catch (error) {
     console.error("Errore durante l'aggiornamento dell'appuntamento:", error);
     res.status(500).json({ message: "Errore durante l'aggiornamento dell'appuntamento" });
+  }
+});
+
+// Reschedule un appuntamento (modifica data/ora)
+router.patch("/:id/reschedule", passport.authenticate("jwt", { session: false }), requireRole("agent", "admin", "manager", "support"), async (req: Request, res: Response) => {
+  try {
+    const parseId = appointmentIdSchema.safeParse(req.params);
+    if (parseId.error || !parseId.data) {
+      res.status(400).json(parseId.error);
+      return;
+    }
+
+    const { requestedDate, notes } = req.body;
+
+    if (!requestedDate) {
+      res.status(400).json({ message: "La nuova data è obbligatoria" });
+      return;
+    }
+
+    const appointment = await appointmentsRepository.getAppointmentById(parseId.data.id);
+    if (!appointment) {
+      res.status(404).json({ message: "Appuntamento non trovato" });
+      return;
+    }
+
+    const userId = req.user?.id;
+    const userRole = req.user?.role;
+
+    if (!userId || !userRole) {
+      res.status(401).json({ message: "Utente non autenticato" });
+      return;
+    }
+
+    const isAuthorized = await checkUpdateAuthorization(userRole, userId, appointment);
+
+    if (!isAuthorized) {
+      res.status(403).json({ message: "Non sei autorizzato a modificare questo appuntamento" });
+      return;
+    }
+
+    const oldDate = new Date(appointment.requestedDate);
+
+    // Aggiorna la data dell'appuntamento
+    const updated = await appointmentsRepository.rescheduleAppointment(
+      Number(parseId.data.id),
+      new Date(requestedDate),
+      notes
+    );
+
+    // Invia email di notifica al cliente
+    const user = await userRepository.getUserById(appointment.userId);
+    const post = await postsRepository.getPostById(appointment.postId);
+
+    if (user && post && user.email) {
+      await sendAppointmentRescheduledEmail(user.email, post.title, oldDate, new Date(requestedDate), notes);
+    }
+
+    res.status(200).json({
+      message: "Appuntamento riprogrammato con successo",
+      appointment: updated,
+    });
+  }
+  catch (error) {
+    console.error("Errore durante il reschedule dell'appuntamento:", error);
+    res.status(500).json({ message: "Errore durante la riprogrammazione dell'appuntamento" });
   }
 });
 
