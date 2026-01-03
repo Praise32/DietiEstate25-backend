@@ -301,7 +301,7 @@ router.patch("/:id/reschedule", passport.authenticate("jwt", { session: false })
     const updated = await appointmentsRepository.rescheduleAppointment(
       Number(parseId.data.id),
       new Date(requestedDate),
-      notes
+      notes,
     );
 
     // Invia email di notifica al cliente
