@@ -9,50 +9,6 @@ import { photos } from "@/db/schema/photo";
 import { posts } from "@/db/schema/posts";
 import { geocodeAddress } from "@/utils/geocoding-service";
 
-// Restituisce tutti i post con le relative foto (array)
-export async function getAllPostsWithPhotos() {
-  const results = await db
-    .select({
-      post: posts,
-      photo: photos,
-    })
-    .from(posts)
-    .leftJoin(photos, eq(photos.postsId, posts.id));
-
-  const postsMap = new Map<number, {
-    id: number;
-    title: string;
-    description: string | null;
-    address: string;
-    city: string;
-    cap: number;
-    price: string;
-    listingType: "vendita" | "affitto";
-    rooms: number | null;
-    size: number | null;
-    floor: number | null;
-    hasElevator: boolean | null;
-    energyClass: string | null;
-    createdAt: string;
-    updatedAt: string;
-    userId: number;
-    agencyId: number | null;
-    location: unknown;
-    photo: Array<typeof photos.$inferSelect>;
-  }>();
-
-  for (const row of results) {
-    const postId = row.post.id;
-    if (!postsMap.has(postId)) {
-      postsMap.set(postId, { ...row.post, photo: [] });
-    }
-    if (row.photo?.id) {
-      postsMap.get(postId)?.photo.push(row.photo);
-    }
-  }
-  return Array.from(postsMap.values());
-}
-
 export async function createPost(post: PostInsertSchema): Promise<PostIdSchema> {
   let coordinates: { lat: number; lon: number };
 
@@ -257,27 +213,6 @@ export async function getPostsByAgencyId(agencyId: number) {
     .orderBy(desc(posts.createdAt));
 
   return agencyPosts;
-}
-
-export async function getPostsByAgencyIdWithPhotos(agencyId: number) {
-  const agencyPosts = await db
-    .select()
-    .from(posts)
-    .where(eq(posts.agencyId, agencyId))
-    .orderBy(desc(posts.createdAt));
-
-  const postsWithPhotos = await Promise.all(
-    agencyPosts.map(async (post) => {
-      const postPhotos = await db
-        .select()
-        .from(photos)
-        .where(eq(photos.postsId, post.id));
-
-      return { ...post, photos: postPhotos };
-    }),
-  );
-
-  return postsWithPhotos;
 }
 
 export async function countAllPosts(filters: Omit<SearchFilters, "page" | "limit">) {

@@ -238,15 +238,6 @@ export async function getAppointmentsByAgentId(agentId: number) {
   return result;
 }
 
-// Recupero appuntamenti per un immobile
-export async function getAppointmentsByPostId(postId: number) {
-  return db
-    .select()
-    .from(appointments)
-    .where(eq(appointments.postId, postId))
-    .orderBy(appointments.requestedDate);
-}
-
 // Aggiornamento dello stato di un appuntamento
 export async function updateAppointmentStatus(
   id: number,

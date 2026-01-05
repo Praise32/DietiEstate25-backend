@@ -217,26 +217,3 @@ export async function getAgencyByAgentId(agentId: number) {
 
   return result?.agency;
 }
-
-// Rimuove il manager da un'agenzia (rendendola orfana)
-export async function removeManagerFromAgency(agencyId: number, managerId: number) {
-  // 1. Imposta managerId a NULL nell'agenzia
-  const [updatedAgency] = await db
-    .update(agencies)
-    .set({ managerId: null })
-    .where(and(eq(agencies.id, agencyId), eq(agencies.managerId, managerId)))
-    .returning();
-
-  // 2. Aggiorna l'utente manager (resetta i flag)
-  if (updatedAgency) {
-    await db
-      .update(user)
-      .set({
-        agencyId: null,
-        hasCreatedAgency: false,
-      })
-      .where(eq(user.id, managerId));
-  }
-
-  return updatedAgency;
-}
