@@ -5,7 +5,6 @@ import { and, desc, eq, gte, lte, sql } from "drizzle-orm";
 import type { PostIdSchema, PostInsertSchema, PostSelectSchema, PostUpdateSchema, SearchFilters } from "@/db/schema/posts";
 
 import { db } from "@/db";
-import { photos } from "@/db/schema/photo";
 import { posts } from "@/db/schema/posts";
 import { geocodeAddress } from "@/utils/geocoding-service";
 

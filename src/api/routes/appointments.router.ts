@@ -392,14 +392,4 @@ router.get("/slots", async (req: Request, res: Response) => {
   }
 });
 
-// Funzione helper per determinare il colore in base allo stato
-function getStatusColor(status: string): string {
-  switch (status) {
-    case "confirmed": return "#4CAF50"; // verde
-    case "rejected": return "#F44336"; // rosso
-    case "pending": return "#FFC107"; // giallo
-    default: return "#2196F3"; // blu
-  }
-}
-
 export default router;
