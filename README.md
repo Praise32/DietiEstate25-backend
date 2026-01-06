@@ -126,4 +126,3 @@ src/
 ## 📄 Licenza
 
 Distribuito sotto licenza MIT. Vedi il file `LICENSE` per maggiori informazioni.
-
