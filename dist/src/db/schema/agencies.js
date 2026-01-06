@@ -1,0 +1,83 @@
+import { relations, sql } from "drizzle-orm";
+import { integer, pgTable, serial, text, timestamp, } from "drizzle-orm/pg-core";
+import { createInsertSchema, createSchemaFactory, createUpdateSchema } from "drizzle-zod";
+import z from "zod";
+import { posts } from "./posts.js";
+import user from "./user.js";
+export const agencies = pgTable("agencies", {
+    id: serial("id").primaryKey(),
+    name: text("name").notNull(),
+    address: text("address").notNull(),
+    city: text("city").notNull(),
+    cap: text("cap").notNull(),
+    phone: text("phone").notNull(),
+    email: text("email").notNull(),
+    website: text("website"),
+    logo: text("logo"),
+    description: text("description"),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    updatedAt: timestamp("updated_at")
+        .defaultNow()
+        .notNull()
+        .$onUpdate(() => sql `now()`),
+    managerId: integer("manager_id").references(() => user.id),
+});
+export const agenciesRelations = relations(agencies, ({ one, many }) => ({
+    manager: one(user, {
+        fields: [agencies.managerId],
+        references: [user.id],
+        relationName: "agencies",
+    }),
+    agents: many(user),
+    properties: many(posts),
+}));
+const { createSelectSchema } = createSchemaFactory({
+    coerce: true,
+});
+export const agenciesIdSchema = createSelectSchema(agencies)
+    .omit({
+    name: true,
+    address: true,
+    city: true,
+    cap: true,
+    phone: true,
+    email: true,
+    website: true,
+    logo: true,
+    description: true,
+    createdAt: true,
+    updatedAt: true,
+    managerId: true,
+});
+export const agenciesInsertSchema = createInsertSchema(agencies)
+    .omit({
+    id: true,
+    createdAt: true,
+    updatedAt: true,
+})
+    .extend({
+    name: z.string().min(1, "Il nome è obbligatorio"),
+    address: z.string().min(1, "L'indirizzo è obbligatorio"),
+    city: z.string().min(1, "La città è obbligatoria"),
+    cap: z.string().min(1, "Il CAP è obbligatorio"),
+    phone: z.string().min(1, "Il numero di telefono è obbligatorio"),
+    email: z.string().email("Inserire un indirizzo email valido"),
+    managerId: z.number().optional(),
+});
+export const agenciesUpdateSchema = createUpdateSchema(agencies)
+    .omit({
+    id: true,
+    createdAt: true,
+    updatedAt: true,
+})
+    .extend({
+    email: z.string().email("Inserire un indirizzo email valido").optional(),
+})
+    .superRefine((data, context) => {
+    if (Object.keys(data).length === 0) {
+        context.addIssue({
+            code: z.ZodIssueCode.custom,
+            message: "È necessario specificare almeno un campo da aggiornare",
+        });
+    }
+});

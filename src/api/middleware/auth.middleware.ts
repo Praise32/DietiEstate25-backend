@@ -4,8 +4,65 @@ import jwt from "jsonwebtoken";
 
 import { postIdSchema } from "@/db/schema/posts";
 import env from "@/env";
+import * as agenciesRepository from "@/repository/agencies.repository";
 import * as postsRepository from "@/repository/posts.repository";
 import * as userRepository from "@/repository/user.repository";
+import { sendBadRequestResponse, sendForbiddenResponse, sendNotFoundResponse, sendUnauthorizedResponse } from "@/utils";
+
+interface TokenPayload {
+  id: number;
+  name?: string;
+  email?: string;
+  role?: string;
+}
+
+function extractTokenFromHeader(authHeader: string | undefined): string | null {
+  if (!authHeader?.startsWith("Bearer ")) {
+    return null;
+  }
+  return authHeader.substring(7);
+}
+
+async function verifyAndDecodeToken(token: string): Promise<TokenPayload | null> {
+  return new Promise((resolve) => {
+    jwt.verify(token, env.JWT_SECRET_KEY, (err, decoded) => {
+      if (err) {
+        resolve(null);
+      }
+      else {
+        resolve(decoded as TokenPayload);
+      }
+    });
+  });
+}
+
+async function enrichUserFromDatabase(decodedToken: TokenPayload) {
+  const userFound = await userRepository.getUserById(decodedToken.id);
+  if (!userFound) {
+    return null;
+  }
+
+  return {
+    ...userFound,
+    role: userFound.role ?? null,
+  };
+}
+
+function createUserFromToken(decodedToken: TokenPayload): Express.User {
+  return {
+    id: decodedToken.id,
+    name: decodedToken.name || null,
+    email: decodedToken.email || null,
+    role: decodedToken.role || null,
+    phone: "",
+    password: "",
+    roleId: 0,
+    agencyId: null,
+    hasCreatedAgency: false,
+    createdAt: "",
+    updatedAt: "",
+  };
+}
 
 export async function authMiddleware(
   req: Request,
@@ -13,118 +70,98 @@ export async function authMiddleware(
   next: NextFunction,
 ) {
   const authHeader = req.get("authorization");
+  const token = extractTokenFromHeader(authHeader);
 
-  if (!authHeader?.startsWith("Bearer ")) {
-    res
-      .status(401)
-      .json({ message: "Accesso negato. Nessun token fornito o formato non valido." });
+  if (!token) {
+    sendUnauthorizedResponse(res, "Accesso negato. Nessun token fornito o formato non valido.");
     return;
   }
 
-  const token = authHeader.substring(7);
-  jwt.verify(token, env.JWT_SECRET_KEY, async (err, decoded) => {
-    if (err) {
-      res.status(401).json({ message: "Accesso negato. Token non valido." });
-      return;
-    }
+  const decodedToken = await verifyAndDecodeToken(token);
 
-    const decodedToken = decoded as {
-      id: number;
-      name?: string;
-      email?: string;
-      role?: string;
-    };
+  if (!decodedToken || !decodedToken.id) {
+    sendUnauthorizedResponse(res, "Accesso negato. Token non valido.");
+    return;
+  }
 
-    if (!decodedToken.id) {
-      res.status(401).json({ message: "Accesso negato. Token non valido." });
-      return;
-    }
-
-    // Se il ruolo è presente nel token, usalo direttamente (più efficiente)
-    if (decodedToken.role) {
-      req.user = {
-        id: decodedToken.id,
-        name: decodedToken.name || null,
-        email: decodedToken.email || null,
-        role: decodedToken.role,
-        // Aggiungi altri campi richiesti da UserSelectSchema se necessari
-        phone: "",
-        password: "",
-        roleId: 0, // Questi non sono usati quando il ruolo è nel token
-        agencyId: null,
-        hasCreatedAgency: false,
-        createdAt: "",
-        updatedAt: "",
-      };
-      next();
-      return;
-    }
-
-    // Fallback: se il ruolo non è nel token, recupera dal database
-    const userFound = await userRepository.getUserById(decodedToken.id);
-    if (!userFound) {
-      res.status(401).json({ message: "Utente non trovato." });
-      return;
-    }
-
-    req.user = {
-      ...userFound,
-      role: userFound.role ?? undefined,
-    };
-
+  if (decodedToken.role) {
+    req.user = createUserFromToken(decodedToken);
     next();
-  });
+    return;
+  }
+
+  const userFromDb = await enrichUserFromDatabase(decodedToken);
+  if (!userFromDb) {
+    sendUnauthorizedResponse(res, "Utente non trovato.");
+    return;
+  }
+
+  req.user = userFromDb;
+  next();
 }
 
-// Middleware per verificare che l'utente sia il proprietario del post o abbia permessi sufficienti
+function hasAdminOrSupportRole(role: string | null | undefined): boolean {
+  return role === "admin" || role === "support";
+}
+
+function isPostOwner(userId: number | undefined, postUserId: number): boolean {
+  return userId === postUserId;
+}
+
+async function isManagerOfPostAgency(userId: number, postAgencyId: number): Promise<boolean> {
+  const managerAgency = await agenciesRepository.getAgencyByManagerId(userId);
+  return !!(managerAgency && managerAgency.id === postAgencyId);
+}
+
+async function canUserModifyPost(
+  currentUser: Express.User,
+  post: { userId: number; agencyId: number | null },
+): Promise<boolean> {
+  if (hasAdminOrSupportRole(currentUser.role)) {
+    return true;
+  }
+
+  if (isPostOwner(currentUser.id, post.userId)) {
+    return true;
+  }
+
+  if (currentUser.role === "manager" && post.agencyId !== null && currentUser.id) {
+    return isManagerOfPostAgency(currentUser.id, post.agencyId);
+  }
+
+  return false;
+}
+
 export async function isOwnerMiddlewarePosts(
   req: Request,
   res: Response,
   next: NextFunction,
 ) {
-  const updatePost = postIdSchema.safeParse(req.params);
-  if (updatePost.error || !updatePost.data) {
-    res.status(400).json(updatePost.error).end();
+  const validation = postIdSchema.safeParse(req.params);
+  if (!validation.success || !validation.data) {
+    sendBadRequestResponse(res, validation.error);
     return;
   }
 
-  const foundPost = await postsRepository.getPostById(updatePost.data.id);
+  const foundPost = await postsRepository.getPostById(validation.data.id);
   if (!foundPost) {
-    res.status(404).end();
+    sendNotFoundResponse(res);
     return;
   }
 
   const currentUser = req.user;
   if (!currentUser) {
-    res.status(401).json({ message: "Utente non autenticato" }).end();
+    sendUnauthorizedResponse(res);
     return;
   }
 
-  // Admin e Support possono modificare/eliminare qualsiasi post
-  if (currentUser.role === "admin" || currentUser.role === "support") {
-    req.posts = foundPost;
-    next();
+  const isAuthorized = await canUserModifyPost(currentUser, foundPost);
+
+  if (!isAuthorized) {
+    sendForbiddenResponse(res, "Non sei autorizzato a modificare questo post");
     return;
   }
 
-  // Il proprietario può sempre modificare/eliminare il proprio post
-  if (foundPost.userId === currentUser.id) {
-    req.posts = foundPost;
-    next();
-    return;
-  }
-  // Manager può modificare/eliminare post della propria agenzia
-  if (currentUser.role === "manager" && foundPost.agencyId !== null && currentUser.id) {
-    // Importa il repository all'inizio del file se non già fatto
-    const agenciesRepository = await import("@/repository/agencies.repository");
-    const managerAgency = await agenciesRepository.getAgencyByManagerId(currentUser.id);
-
-    if (managerAgency && managerAgency.id === foundPost.agencyId) {
-      req.posts = foundPost;
-      next();
-      return;
-    }
-  }
-
-  res.status(403).json({ message: "Non sei autorizzato a modificare questo post" }).end();
+  req.posts = foundPost;
+  next();
 }

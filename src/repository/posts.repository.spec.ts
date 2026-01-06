@@ -32,7 +32,13 @@ describe("posts Repository - getPostsNearby", () => {
     const lat = 40.85;
     const lon = 14.26;
     const radius = 5000;
-    const result = await getPostsNearby(lat, lon, radius, 1, 10);
+    const result = await getPostsNearby({ 
+      latitude: lat, 
+      longitude: lon, 
+      radius, 
+      page: 1, 
+      limit: 10 
+    });
 
     // Assert
     expect(db.select).toHaveBeenCalled();

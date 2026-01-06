@@ -8,19 +8,30 @@ import { db } from "@/db";
 import { posts } from "@/db/schema/posts";
 import { geocodeAddress } from "@/utils/geocoding-service";
 
-export async function createPost(post: PostInsertSchema): Promise<PostIdSchema> {
-  let coordinates: { lat: number; lon: number };
+import type { NearbySearchParams } from "./search-params";
 
+import { calculateOffset, createSearchCenterPoint } from "./search-params";
+
+interface Coordinates {
+  lat: number;
+  lon: number;
+}
+
+async function resolvePostCoordinates(post: PostInsertSchema): Promise<Coordinates> {
   if (post.latitude !== undefined && post.longitude !== undefined) {
-    coordinates = { lat: post.latitude, lon: post.longitude };
+    return { lat: post.latitude, lon: post.longitude };
   }
-  else {
-    const geocoded = await geocodeAddress(post.address, post.city, post.cap.toString());
-    if (!geocoded) {
-      throw new Error("Impossibile geocodificare l'indirizzo fornito");
-    }
-    coordinates = { lat: geocoded.latitude, lon: geocoded.longitude };
+
+  const geocoded = await geocodeAddress(post.address, post.city, post.cap.toString());
+  if (!geocoded) {
+    throw new Error("Impossibile geocodificare l'indirizzo fornito");
   }
+
+  return { lat: geocoded.latitude, lon: geocoded.longitude };
+}
+
+export async function createPost(post: PostInsertSchema): Promise<PostIdSchema> {
+  const coordinates = await resolvePostCoordinates(post);
 
   const { latitude: _lat, longitude: _lon, ...postWithoutCoords } = post;
 
@@ -32,22 +43,13 @@ export async function createPost(post: PostInsertSchema): Promise<PostIdSchema> 
     })
     .returning();
 
-  // eslint-disable-next-line no-console
-  console.log("Post creato con coordinate:", coordinates);
-
   return insertedPost;
 }
 
-// Ricerca immobili nelle vicinanze con paginazione
-export async function getPostsNearby(
-  latitude: number,
-  longitude: number,
-  radiusMeters: number,
-  page: number = 1,
-  limit: number = 10,
-) {
-  const offset = (page - 1) * limit;
-  const searchCenterPoint = `SRID=4326;POINT(${longitude} ${latitude})`;
+export async function getPostsNearby(searchParams: NearbySearchParams) {
+  const { latitude, longitude, radius, page, limit } = searchParams;
+  const offset = calculateOffset(page, limit);
+  const searchCenterPoint = createSearchCenterPoint(longitude, latitude);
 
   const nearbyPosts = await db
     .select()
@@ -56,7 +58,7 @@ export async function getPostsNearby(
       sql`ST_DWithin(
         ${posts.location}, 
         ${searchCenterPoint}::geography, 
-        ${radiusMeters}
+        ${radius}
       )`,
     )
     .orderBy(
@@ -71,13 +73,9 @@ export async function getPostsNearby(
   return nearbyPosts;
 }
 
-// Conta immobili nelle vicinanze
-export async function countPostsNearby(
-  latitude: number,
-  longitude: number,
-  radiusMeters: number,
-) {
-  const searchCenterPoint = `SRID=4326;POINT(${longitude} ${latitude})`;
+export async function countPostsNearby(searchParams: Pick<NearbySearchParams, "latitude" | "longitude" | "radius">) {
+  const { latitude, longitude, radius } = searchParams;
+  const searchCenterPoint = createSearchCenterPoint(longitude, latitude);
 
   const result = await db
     .select({ count: sql<number>`count(*)` })
@@ -86,24 +84,21 @@ export async function countPostsNearby(
       sql`ST_DWithin(
         ${posts.location}, 
         ${searchCenterPoint}::geography, 
-        ${radiusMeters}
+        ${radius}
       )`,
     );
 
   return Number(result[0]?.count ?? 0);
 }
 
-// Ricerca immobili nelle vicinanze con filtri aggiuntivi
-export async function getPostsNearbyWithFilters(
-  latitude: number,
-  longitude: number,
-  radiusMeters: number,
-  filters: Omit<SearchFilters, "latitude" | "longitude" | "radius" | "page" | "limit">,
-  page: number = 1,
-  limit: number = 10,
-) {
-  const offset = (page - 1) * limit;
-  const searchCenterPoint = `SRID=4326;POINT(${longitude} ${latitude})`;
+interface NearbyWithFiltersParams extends NearbySearchParams {
+  filters: Omit<SearchFilters, "latitude" | "longitude" | "radius" | "page" | "limit">;
+}
+
+export async function getPostsNearbyWithFilters(searchParams: NearbyWithFiltersParams) {
+  const { latitude, longitude, radius, filters, page, limit } = searchParams;
+  const offset = calculateOffset(page, limit);
+  const searchCenterPoint = createSearchCenterPoint(longitude, latitude);
 
   const conditions = buildWhereConditions(filters);
 
@@ -111,7 +106,7 @@ export async function getPostsNearbyWithFilters(
     sql`ST_DWithin(
       ${posts.location}, 
       ${searchCenterPoint}::geography, 
-      ${radiusMeters}
+      ${radius}
     )`,
   );
 
@@ -131,14 +126,11 @@ export async function getPostsNearbyWithFilters(
   return nearbyPosts;
 }
 
-// Conta immobili nelle vicinanze con filtri
 export async function countPostsNearbyWithFilters(
-  latitude: number,
-  longitude: number,
-  radiusMeters: number,
-  filters: Omit<SearchFilters, "latitude" | "longitude" | "radius" | "page" | "limit">,
+  searchParams: Pick<NearbyWithFiltersParams, "latitude" | "longitude" | "radius" | "filters">,
 ) {
-  const searchCenterPoint = `SRID=4326;POINT(${longitude} ${latitude})`;
+  const { latitude, longitude, radius, filters } = searchParams;
+  const searchCenterPoint = createSearchCenterPoint(longitude, latitude);
 
   const conditions = buildWhereConditions(filters);
 
@@ -146,7 +138,7 @@ export async function countPostsNearbyWithFilters(
     sql`ST_DWithin(
       ${posts.location}, 
       ${searchCenterPoint}::geography, 
-      ${radiusMeters}
+      ${radius}
     )`,
   );
 
@@ -170,8 +162,6 @@ export async function updatePost(postId: number, postBody: PostUpdateSchema) {
 export async function getPostById(id: number): Promise<PostSelectSchema | undefined> {
   try {
     const [post] = await db.select().from(posts).where(eq(posts.id, id));
-    // eslint-disable-next-line no-console
-    console.log("Post trovato:", post);
     return post;
   }
   catch (error) {
@@ -187,7 +177,7 @@ export async function deletePost(id: number): Promise<PostSelectSchema | undefin
 
 export async function getAllPosts(filters: SearchFilters) {
   const { page, limit, ...searchParams } = filters;
-  const offset = (page - 1) * limit;
+  const offset = calculateOffset(page, limit);
 
   const conditions = buildWhereConditions(searchParams);
 
@@ -226,7 +216,6 @@ export async function countAllPosts(filters: Omit<SearchFilters, "page" | "limit
   return Number(result[0]?.count ?? 0);
 }
 
-// FUNZIONE HELPER PER COSTRUIRE LE CONDIZIONI
 function buildWhereConditions(params: Omit<SearchFilters, "page" | "limit">): SQL[] {
   const conditions: SQL[] = [];
 

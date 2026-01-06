@@ -5,7 +5,7 @@ import express from "express";
 import validate from "express-zod-safe";
 import { z } from "zod";
 
-import { deleteFileFromS3, getPresignedUrl, upload } from "@/api/middleware/photo.middleware";
+import { deleteFileFromS3, upload } from "@/api/middleware/photo.middleware";
 import { db } from "@/db";
 import {
   postIdSchema,
@@ -14,9 +14,18 @@ import {
   postUpdateSchema,
   searchFiltersSchema,
 } from "@/db/schema/posts";
+import * as agenciesRepository from "@/repository/agencies.repository";
 import * as photoRepository from "@/repository/photos.repository";
 import * as postsRepository from "@/repository/posts.repository";
 import * as userRepository from "@/repository/user.repository";
+import {
+  enrichPostWithPhotos,
+  sendBadRequestResponse,
+  sendForbiddenResponse,
+  sendInternalErrorResponse,
+  sendNotFoundResponse,
+  sendUnauthorizedResponse,
+} from "@/utils";
 import passport from "@/utils/passport";
 import { formatWeatherData, getWeatherForecast } from "@/utils/weather-service";
 
@@ -24,218 +33,236 @@ import { authMiddleware, isOwnerMiddlewarePosts } from "../middleware/auth.middl
 
 const router = express.Router();
 
-router.get("/:id", validate({ params: postIdSchema }), async (req, res) => {
-  const foundPost = await postsRepository.getPostById(req.params.id);
+async function fetchPostWithAuthorAndPhotos(postId: number) {
+  const foundPost = await postsRepository.getPostById(postId);
   if (!foundPost) {
-    res.status(404).end();
-    return;
+    return null;
   }
 
   const author = await userRepository.getUserById(foundPost.userId);
-
   if (!author) {
-    res.status(404).json({ message: "Autore non trovato." });
+    return null;
+  }
+
+  const postWithPhotos = await enrichPostWithPhotos(foundPost);
+  return { ...postWithPhotos, author };
+}
+
+router.get("/:id", validate({ params: postIdSchema }), async (req, res) => {
+  const postDetails = await fetchPostWithAuthorAndPhotos(req.params.id);
+
+  if (!postDetails) {
+    sendNotFoundResponse(res, "Post o autore non trovato");
     return;
   }
 
-  // Recupera tutte le foto del post
-  const photos = await photoRepository.getAllPhotoByPostId(foundPost.id);
-  // Genera i presigned URL per tutte le foto
-  const photosWithUrls = await Promise.all(
-    photos.map(async photo => ({
-      ...photo,
-      url: await getPresignedUrl(photo.filename),
-    })),
-  );
-  res.json({ ...foundPost, photos: photosWithUrls, author });
+  res.json(postDetails);
 });
+
+interface SearchResult {
+  posts: unknown[];
+  total: number;
+}
+
+async function executePostSearch(filters: typeof searchFiltersSchema._type): Promise<SearchResult> {
+  const { page, limit, latitude, longitude, radius, ...otherFilters } = filters;
+
+  const hasLocationSearch = latitude !== undefined && longitude !== undefined && radius !== undefined;
+  const hasAdditionalFilters = Object.values(otherFilters).some(value => value !== undefined);
+
+  if (hasLocationSearch) {
+    if (hasAdditionalFilters) {
+      const posts = await postsRepository.getPostsNearbyWithFilters({
+        latitude: latitude!,
+        longitude: longitude!,
+        radius: radius!,
+        page,
+        limit,
+        filters: otherFilters,
+      });
+      const total = await postsRepository.countPostsNearbyWithFilters({
+        latitude: latitude!,
+        longitude: longitude!,
+        radius: radius!,
+        filters: otherFilters,
+      });
+      return { posts, total };
+    }
+
+    const posts = await postsRepository.getPostsNearby({
+      latitude: latitude!,
+      longitude: longitude!,
+      radius: radius!,
+      page,
+      limit,
+    });
+    const total = await postsRepository.countPostsNearby({
+      latitude: latitude!,
+      longitude: longitude!,
+      radius: radius!,
+    });
+    return { posts, total };
+  }
+
+  const posts = await postsRepository.getAllPosts(filters);
+  const total = await postsRepository.countAllPosts(otherFilters);
+  return { posts, total };
+}
+
+async function enrichPostsWithPhotos(posts: Array<{ id: number; [key: string]: unknown }>) {
+  return Promise.all(posts.map(post => enrichPostWithPhotos(post)));
+}
+
+function buildSearchResponse(
+  postsWithPhotos: unknown[],
+  filters: typeof searchFiltersSchema._type,
+  total: number,
+) {
+  const { page, limit, latitude, longitude, radius } = filters;
+
+  const response: {
+    data: unknown[];
+    page: number;
+    limit: number;
+    total: number;
+    totalPages: number;
+    searchCenter?: { latitude: number; longitude: number };
+    searchRadius?: number;
+    searchType: string;
+  } = {
+    data: postsWithPhotos,
+    page,
+    limit,
+    total,
+    totalPages: Math.ceil(total / limit),
+    searchType: "standard",
+  };
+
+  if (latitude !== undefined && longitude !== undefined && radius !== undefined) {
+    response.searchCenter = { latitude, longitude };
+    response.searchRadius = radius;
+    response.searchType = "nearby";
+  }
+
+  return response;
+}
 
 router.get("/", (async (req: Request, res: Response) => {
   const validation = searchFiltersSchema.safeParse(req.query);
 
   if (!validation.success) {
-    res.status(400).json({ errors: validation.error.issues });
+    sendBadRequestResponse(res, { errors: validation.error.issues });
     return;
   }
 
-  const filters = validation.data;
-
   try {
-    let posts;
-    let total;
-
-    const { page, limit, latitude, longitude, radius, ...otherFilters } = filters;
-
-    if (latitude !== undefined && longitude !== undefined && radius !== undefined) {
-      const hasOtherFilters = Object.values(otherFilters).some(value => value !== undefined);
-
-      if (hasOtherFilters) {
-        posts = await postsRepository.getPostsNearbyWithFilters(
-          latitude,
-          longitude,
-          radius,
-          otherFilters,
-          page,
-          limit,
-        );
-
-        total = await postsRepository.countPostsNearbyWithFilters(
-          latitude,
-          longitude,
-          radius,
-          otherFilters,
-        );
-      }
-      else {
-        posts = await postsRepository.getPostsNearby(
-          latitude,
-          longitude,
-          radius,
-          page,
-          limit,
-        );
-
-        total = await postsRepository.countPostsNearby(
-          latitude,
-          longitude,
-          radius,
-        );
-      }
-    }
-    else {
-      posts = await postsRepository.getAllPosts(filters);
-      total = await postsRepository.countAllPosts(otherFilters);
-    }
-
-    const postsWithPhotos = await Promise.all(
-      posts.map(async (post) => {
-        const photos = await photoRepository.getAllPhotoByPostId(post.id);
-        const photosWithUrls = await Promise.all(
-          photos.map(async photo => ({
-            ...photo,
-            url: await getPresignedUrl(photo.filename),
-          })),
-        );
-        return { ...post, photos: photosWithUrls };
-      }),
-    );
-
-    const response: {
-      data: typeof postsWithPhotos;
-      page: number;
-      limit: number;
-      total: number;
-      totalPages: number;
-      searchCenter?: { latitude: number; longitude: number };
-      searchRadius?: number;
-      searchType: string;
-    } = {
-      data: postsWithPhotos,
-      page: filters.page,
-      limit: filters.limit,
-      total,
-      totalPages: Math.ceil(total / filters.limit),
-      searchType: "standard",
-    };
-
-    if (latitude !== undefined && longitude !== undefined && radius !== undefined) {
-      response.searchCenter = { latitude, longitude };
-      response.searchRadius = radius;
-      response.searchType = "nearby";
-    }
+    const filters = validation.data;
+    const { posts, total } = await executePostSearch(filters);
+    const postsWithPhotos = await enrichPostsWithPhotos(posts as Array<{ id: number; [key: string]: unknown }>);
+    const response = buildSearchResponse(postsWithPhotos, filters, total);
 
     res.status(200).json(response);
   }
   catch (error) {
     console.error("Errore durante la ricerca dei post:", error);
-    res.status(500).json({ message: "Errore interno del server" });
+    sendInternalErrorResponse(res);
   }
 }) as RequestHandler);
+
+async function createPostForUser(userId: number, postData: typeof postInsertSchema._type) {
+  const user = await userRepository.getUserById(userId);
+  if (!user) {
+    throw new Error("USER_NOT_FOUND");
+  }
+
+  return postsRepository.createPost({
+    ...postData,
+    userId,
+    agencyId: user.agencyId || null,
+  });
+}
 
 router.post("/", passport.authenticate("jwt", { session: false }), validate({ body: postInsertSchema }), async (req, res) => {
   try {
     const userId = req.user?.id;
     if (!userId) {
-      res.status(401).json({ message: "Utente non autenticato" });
+      sendUnauthorizedResponse(res);
       return;
     }
 
-    const user = await userRepository.getUserById(userId);
-
-    if (!user) {
-      res.status(404).json({ message: "Utente non trovato" });
-      return;
-    }
-
-    const postInsert = await postsRepository.createPost({
-      ...req.body,
-      userId,
-      agencyId: user.agencyId || null,
-    });
-
+    const postInsert = await createPostForUser(userId, req.body);
     res.status(201).json(postInsert);
   }
   catch (error) {
-    if (error instanceof Error && error.message.includes("geocodificare")) {
-      res.status(400).json({
-        message: "Indirizzo non valido o non trovato. Verifica che via, città e CAP siano corretti.",
-        details: error.message,
-      });
-      return;
+    if (error instanceof Error) {
+      if (error.message === "USER_NOT_FOUND") {
+        sendNotFoundResponse(res, "Utente non trovato");
+        return;
+      }
+      if (error.message.includes("geocodificare")) {
+        sendBadRequestResponse(res, {
+          message: "Indirizzo non valido o non trovato. Verifica che via, città e CAP siano corretti.",
+          details: error.message,
+        });
+        return;
+      }
     }
 
     console.error("Errore durante la creazione del post:", error);
-    res.status(500).json({ message: "Errore interno del server" });
+    sendInternalErrorResponse(res);
   }
 });
 
-// Elimina un post - Può essere eliminato da: proprietario, manager dell'agenzia, admin, support
-router.delete("/:id", passport.authenticate("jwt", { session: false }), isOwnerMiddlewarePosts, async (req, res) => {
-  const deletePost = postIdSchema.safeParse(req.params);
-  if (deletePost.error || !deletePost.data) {
-    res.status(400).json(deletePost.error);
-    return;
-  }
-  const Photo = await photoRepository.getAllPhotoByPostId(deletePost.data.id);
+async function deleteAllPostPhotos(postId: number) {
+  const photos = await photoRepository.getAllPhotoByPostId(postId);
 
-  if (Photo && Array.isArray(Photo)) {
-    for (const photo of Photo) {
+  if (photos && Array.isArray(photos)) {
+    for (const photo of photos) {
       await deleteFileFromS3(photo.filename);
     }
   }
+}
 
-  const Post = await postsRepository.deletePost(deletePost.data.id);
-  if (!Post) {
-    res.status(404).end();
+router.delete("/:id", passport.authenticate("jwt", { session: false }), isOwnerMiddlewarePosts, async (req, res) => {
+  const deleteValidation = postIdSchema.safeParse(req.params);
+  if (!deleteValidation.success || !deleteValidation.data) {
+    sendBadRequestResponse(res, deleteValidation.error);
     return;
   }
 
-  res.json(Post);
+  await deleteAllPostPhotos(deleteValidation.data.id);
+
+  const deletedPost = await postsRepository.deletePost(deleteValidation.data.id);
+  if (!deletedPost) {
+    sendNotFoundResponse(res);
+    return;
+  }
+
+  res.json(deletedPost);
 });
 
-// Modifica un post - Può essere modificato da: proprietario, manager dell'agenzia, admin, support
 router.put("/:id", authMiddleware, isOwnerMiddlewarePosts, async (req, res) => {
-  const putID = postIdSchema.safeParse(req.params);
-  if (putID.error || !putID.data) {
-    res.status(400).json(putID.error);
+  const paramValidation = postIdSchema.safeParse(req.params);
+  if (!paramValidation.success || !paramValidation.data) {
+    sendBadRequestResponse(res, paramValidation.error);
     return;
   }
 
-  const putBody = postUpdateSchema.safeParse(req.body);
-  if (putBody.error || !putBody.data) {
-    res.status(400).json(putBody.error);
+  const bodyValidation = postUpdateSchema.safeParse(req.body);
+  if (!bodyValidation.success || !bodyValidation.data) {
+    sendBadRequestResponse(res, bodyValidation.error);
     return;
   }
 
   const postId = req.posts?.id;
   if (!postId) {
-    res.status(404).json({ message: "Post non trovato" });
+    sendNotFoundResponse(res, "Post non trovato");
     return;
   }
 
-  const updatedPost = await postsRepository.updatePost(postId, putBody.data);
+  const updatedPost = await postsRepository.updatePost(postId, bodyValidation.data);
   if (!updatedPost) {
-    res.status(404).end();
+    sendNotFoundResponse(res);
     return;
   }
 
@@ -244,7 +271,7 @@ router.put("/:id", authMiddleware, isOwnerMiddlewarePosts, async (req, res) => {
 
 router.post("/:id/upload", authMiddleware, isOwnerMiddlewarePosts, upload.array("imageFiles", 5), async (req, res) => {
   if (!req.files || (req.files as Express.Multer.File[]).length === 0) {
-    res.status(400).json({ message: "Nessun file caricato." });
+    sendBadRequestResponse(res, "Nessun file caricato.");
     return;
   }
 
@@ -252,7 +279,7 @@ router.post("/:id/upload", authMiddleware, isOwnerMiddlewarePosts, upload.array(
   const postId = req.posts?.id;
 
   if (!userId || !postId) {
-    res.status(401).json({ message: "Utente o post non trovato" });
+    sendUnauthorizedResponse(res, "Utente o post non trovato");
     return;
   }
 
@@ -278,30 +305,24 @@ router.post("/:id/upload", authMiddleware, isOwnerMiddlewarePosts, upload.array(
   res.status(201).json(photos);
 });
 
-// Helper function per verificare autorizzazione eliminazione foto
-async function checkPhotoDeleteAuthorization(
+async function isUserAuthorizedToDeletePhoto(
   currentUser: Express.User,
   photo: { userId: number },
   post: { userId: number; agencyId: number | null },
 ): Promise<boolean> {
-  // Admin e Support possono eliminare qualsiasi foto
   if (currentUser.role === "admin" || currentUser.role === "support") {
     return true;
   }
 
-  // Il proprietario della foto può eliminarla
   if (photo.userId === currentUser.id) {
     return true;
   }
 
-  // Il proprietario del post può eliminare le foto
   if (post.userId === currentUser.id) {
     return true;
   }
 
-  // Manager può eliminare foto dei post della propria agenzia
   if (currentUser.role === "manager" && post.agencyId !== null && currentUser.id) {
-    const agenciesRepository = await import("@/repository/agencies.repository");
     const managerAgency = await agenciesRepository.getAgencyByManagerId(currentUser.id);
     return !!(managerAgency && managerAgency.id === post.agencyId);
   }
@@ -312,38 +333,38 @@ async function checkPhotoDeleteAuthorization(
 router.delete("/photos/:id", passport.authenticate("jwt", { session: false }), async (req, res) => {
   const photoId = Number(req.params.id);
   if (Number.isNaN(photoId)) {
-    res.status(400).json({ message: "ID foto non valido." });
+    sendBadRequestResponse(res, "ID foto non valido.");
     return;
   }
 
   const photo = await photoRepository.getPhotoById(photoId);
   if (!photo) {
-    res.status(404).json({ message: "Foto non trovata." });
+    sendNotFoundResponse(res, "Foto non trovata.");
     return;
   }
 
   const post = await postsRepository.getPostById(photo.postsId);
   if (!post) {
-    res.status(404).json({ message: "Post non trovato." });
+    sendNotFoundResponse(res, "Post non trovato.");
     return;
   }
 
   const currentUser = req.user;
   if (!currentUser) {
-    res.status(401).json({ message: "Utente non autenticato" });
+    sendUnauthorizedResponse(res);
     return;
   }
 
-  const isAuthorized = await checkPhotoDeleteAuthorization(currentUser, photo, post);
+  const isAuthorized = await isUserAuthorizedToDeletePhoto(currentUser, photo, post);
 
   if (!isAuthorized) {
-    res.status(403).json({ message: "Non sei autorizzato a eliminare questa foto." });
+    sendForbiddenResponse(res, "Non sei autorizzato a eliminare questa foto.");
     return;
   }
 
   const deleted = await photoRepository.deletePhoto(photoId);
   if (!deleted) {
-    res.status(500).json({ message: "Errore durante l'eliminazione della foto dal database." });
+    sendInternalErrorResponse(res, "Errore durante l'eliminazione della foto dal database.");
     return;
   }
 
@@ -359,16 +380,28 @@ router.delete("/photos/:id", passport.authenticate("jwt", { session: false }), a
 
 const weatherQuerySchema = z.object({
   days: z.coerce.number().min(1).max(16).default(7),
-  latitude: z.coerce.number().min(-90).max(90), // Ora obbligatorio
-  longitude: z.coerce.number().min(-180).max(180), // Ora obbligatorio
+  latitude: z.coerce.number().min(-90).max(90),
+  longitude: z.coerce.number().min(-180).max(180),
 });
 
-// Ottieni previsioni meteo per un immobile (con coordinate obbligatorie dal frontend)
+async function fetchPostLocation(postId: number) {
+  const [post] = await db
+    .select({
+      id: posts.id,
+      address: posts.address,
+      city: posts.city,
+    })
+    .from(posts)
+    .where(eq(posts.id, postId));
+
+  return post;
+}
+
 router.get("/:id/weather", async (req: Request, res: Response) => {
   try {
     const paramValidation = postIdSchema.safeParse(req.params);
     if (!paramValidation.success) {
-      res.status(400).json({
+      sendBadRequestResponse(res, {
         message: "ID post non valido",
         errors: paramValidation.error.issues,
       });
@@ -377,7 +410,7 @@ router.get("/:id/weather", async (req: Request, res: Response) => {
 
     const queryValidation = weatherQuerySchema.safeParse(req.query);
     if (!queryValidation.success) {
-      res.status(400).json({
+      sendBadRequestResponse(res, {
         message: "Parametri di query non validi. Latitudine e longitudine sono obbligatorie.",
         errors: queryValidation.error.issues,
       });
@@ -387,29 +420,14 @@ router.get("/:id/weather", async (req: Request, res: Response) => {
     const { id: postId } = paramValidation.data;
     const { days, latitude, longitude } = queryValidation.data;
 
-    const [post] = await db
-      .select({
-        id: posts.id,
-        address: posts.address,
-        city: posts.city,
-      })
-      .from(posts)
-      .where(eq(posts.id, postId));
+    const post = await fetchPostLocation(postId);
 
     if (!post) {
-      res.status(404).json({ message: "Immobile non trovato" });
+      sendNotFoundResponse(res, "Immobile non trovato");
       return;
     }
 
-    // eslint-disable-next-line no-console
-    console.log(`Coordinate dal frontend per post ${postId}: lat=${latitude}, lon=${longitude}`);
-
-    const forecast = await getWeatherForecast(
-      latitude,
-      longitude,
-      Math.min(days, 16),
-    );
-
+    const forecast = await getWeatherForecast(latitude, longitude, Math.min(days, 16));
     const formattedForecast = formatWeatherData(forecast);
 
     res.status(200).json({
@@ -427,7 +445,7 @@ router.get("/:id/weather", async (req: Request, res: Response) => {
   }
   catch (error) {
     console.error("Errore durante il recupero delle previsioni meteo:", error);
-    res.status(500).json({ message: "Errore durante il recupero delle previsioni meteo" });
+    sendInternalErrorResponse(res, "Errore durante il recupero delle previsioni meteo");
   }
 });
 
