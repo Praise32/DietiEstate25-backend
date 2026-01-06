@@ -25,7 +25,7 @@ describe("posts Repository - getPostsNearby", () => {
             longitude: lon,
             radius,
             page: 1,
-            limit: 10
+            limit: 10,
         });
         expect(db.select).toHaveBeenCalled();
         expect(fromMock).toHaveBeenCalled();
