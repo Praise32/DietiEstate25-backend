@@ -74,7 +74,7 @@ Questa applicazione fornisce API RESTful robuste per la gestione di annunci immo
    AWS_ACCESS_KEY_ID="tua_aws_key"
    AWS_SECRET_ACCESS_KEY="tua_aws_secret"
    AWS_REGION="eu-north-1"
-   S3_BUCKET_NAME="streetcats-bucket"
+   S3_BUCKET_NAME="DietiEstates25-bucket"
 
    # Google OAuth
    GOOGLE_CLIENT_ID="tuo_google_client_id"
