@@ -7,7 +7,11 @@ import { appointments } from "@/db/schema/appointments";
 import { posts } from "@/db/schema/posts";
 import user from "@/db/schema/user";
 
-// Recupero di tutti gli appuntamenti (per admin e support) - AGGIORNATO
+/**
+ * Recupera tutti gli appuntamenti di visita con dettagli post, cliente e agente (accesso admin/support).
+ *
+ * @returns Promise di array con dati appuntamento arricchiti di informazioni immobile e utenti
+ */
 export async function getAllAppointments() {
   const result = await db
     .select({
@@ -42,7 +46,12 @@ export async function getAllAppointments() {
   return result;
 }
 
-// Recupero appuntamenti per agenzia (per manager)
+/**
+ * Recupera tutti gli appuntamenti gestiti dagli agenti di un'agenzia specifica (accesso manager).
+ *
+ * @param agencyId - ID dell'agenzia di cui recuperare gli appuntamenti
+ * @returns Promise di array appuntamenti filtrati per agenti dell'agenzia
+ */
 export async function getAppointmentsByAgencyId(agencyId: number) {
   // Recupera gli agenti dell'agenzia usando il campo agencyId direttamente
   const agentIds = await db
@@ -88,7 +97,13 @@ export async function getAppointmentsByAgencyId(agencyId: number) {
   return result;
 }
 
-// Recupero tutti gli appuntamenti in formato calendario (per admin e support) - AGGIORNATO
+/**
+ * Recupera appuntamenti in formato ottimizzato per visualizzazione calendario con filtri data opzionali.
+ *
+ * @param start - Data minima per filtrare gli appuntamenti (opzionale)
+ * @param end - Data massima per filtrare gli appuntamenti (opzionale)
+ * @returns Promise di array con dati essenziali per rendering calendario
+ */
 export async function getAllAppointmentsForCalendar(start?: Date, end?: Date) {
   const conditions = [];
 
@@ -120,7 +135,14 @@ export async function getAllAppointmentsForCalendar(start?: Date, end?: Date) {
     .orderBy(appointments.requestedDate);
 }
 
-// Recupero appuntamenti per agenzia in formato calendario (per manager) - AGGIORNATO
+/**
+ * Recupera appuntamenti di un'agenzia per calendario con range date opzionale.
+ *
+ * @param agencyId - ID dell'agenzia di cui visualizzare gli appuntamenti
+ * @param start - Data inizio range (opzionale)
+ * @param end - Data fine range (opzionale)
+ * @returns Promise di array con dati calendario degli agenti dell'agenzia
+ */
 export async function getAppointmentsByAgencyIdForCalendar(
   agencyId: number,
   start?: Date,
@@ -166,7 +188,12 @@ export async function getAppointmentsByAgencyIdForCalendar(
     .orderBy(appointments.requestedDate);
 }
 
-// Creazione di un nuovo appuntamento
+/**
+ * Crea una nuova richiesta di appuntamento per visita immobiliare.
+ *
+ * @param data - Dati appuntamento contenenti userId, agentId, postId, data richiesta e note
+ * @returns Promise dell'appuntamento creato con status 'pending' di default
+ */
 export async function createAppointment(data: AppointmentInsertSchema) {
   const [appointment] = await db
     .insert(appointments)
@@ -175,7 +202,12 @@ export async function createAppointment(data: AppointmentInsertSchema) {
   return appointment;
 }
 
-// Recupero di un appuntamento per ID
+/**
+ * Recupera un singolo appuntamento tramite identificativo univoco.
+ *
+ * @param id - ID dell'appuntamento richiesto
+ * @returns Promise dell'appuntamento trovato o undefined
+ */
 export async function getAppointmentById(id: number) {
   const [appointment] = await db
     .select()
@@ -184,7 +216,12 @@ export async function getAppointmentById(id: number) {
   return appointment;
 }
 
-// Recupero appuntamenti per un utente (cliente)
+/**
+ * Recupera tutti gli appuntamenti richiesti da un cliente specifico.
+ *
+ * @param userId - ID del cliente (customer) di cui recuperare le visite
+ * @returns Promise di array appuntamenti con dati immobile e agente assegnato
+ */
 export async function getAppointmentsByUserId(userId: number) {
   const result = await db
     .select({
@@ -211,7 +248,12 @@ export async function getAppointmentsByUserId(userId: number) {
   return result;
 }
 
-// Recupero appuntamenti per un agente
+/**
+ * Recupera tutti gli appuntamenti assegnati a un agente specifico.
+ *
+ * @param agentId - ID dell'agente di cui recuperare l'agenda visite
+ * @returns Promise di array con appuntamenti, dati immobile e informazioni cliente
+ */
 export async function getAppointmentsByAgentId(agentId: number) {
   const result = await db
     .select({
@@ -238,7 +280,15 @@ export async function getAppointmentsByAgentId(agentId: number) {
   return result;
 }
 
-// Aggiornamento dello stato di un appuntamento
+/**
+ * Aggiorna lo stato di un appuntamento (pending/confirmed/rejected/completed/cancelled).
+ *
+ * @param id - ID dell'appuntamento da modificare
+ * @param userId - ID utente che esegue l'operazione (per verifica permessi agenti)
+ * @param data - Nuovi valori status e note
+ * @param userRole - Ruolo utente per applicare filtri autorizzazione
+ * @returns Promise dell'appuntamento aggiornato o undefined se non autorizzato
+ */
 export async function updateAppointmentStatus(
   id: number,
   userId: number,
@@ -266,7 +316,14 @@ export async function updateAppointmentStatus(
   return updated;
 }
 
-// Eliminazione di un appuntamento
+/**
+ * Elimina un appuntamento dal sistema.
+ *
+ * @param id - ID dell'appuntamento da cancellare
+ * @param userId - ID utente che esegue la cancellazione
+ * @param userRole - Ruolo per verificare permessi (customer può cancellare solo i propri)
+ * @returns Promise dell'appuntamento eliminato o undefined se non autorizzato
+ */
 export async function deleteAppointment(id: number, userId: number, userRole: string) {
   // Per i clienti, verifica che sia il loro appuntamento
   // Per admin e manager, la verifica è già stata fatta nel router
@@ -376,7 +433,12 @@ export async function rescheduleAppointment(id: number, newDate: Date, notes?: s
   return updated;
 }
 
-// Recupero solo gli slot occupati (pubblico/leggero)
+/**
+ * Recupera solo le date/orari già occupati per evitare sovrapposizioni (endpoint pubblico).
+ *
+ * @param filters - Filtri opzionali per agentId, postId e range date
+ * @returns Promise di array con solo requestedDate degli slot occupati (pending/confirmed)
+ */
 export async function getOccupiedSlots(filters: { agentId?: number; postId?: number; start?: Date; end?: Date }) {
   const conditions = [
     inArray(appointments.status, ["pending", "confirmed"]),

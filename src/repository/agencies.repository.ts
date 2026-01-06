@@ -6,23 +6,38 @@ import { db } from "@/db";
 import { agencies, roles, user } from "@/db/schema";
 import { posts } from "@/db/schema/posts";
 
-// Recupera tutte le agenzie
+/**
+ * Recupera tutte le agenzie immobiliari registrate nel sistema.
+ *
+ * @returns Promise di array contenente tutte le agenzie ordinate per data creazione decrescente
+ */
 export async function getAllAgencies() {
   return db.select().from(agencies).orderBy(desc(agencies.createdAt));
 }
 
-// Recupera un'agenzia specifica per ID
+/**
+ * Recupera i dettagli completi di una singola agenzia tramite ID.
+ *
+ * @param id - Identificativo univoco dell'agenzia
+ * @returns Promise dell'agenzia trovata o undefined se non esistente
+ */
 export async function getAgencyById(id: number) {
   const [agency] = await db.select().from(agencies).where(eq(agencies.id, id));
   return agency;
 }
 
-// Crea una nuova agenzia
+/**
+ * Crea una nuova agenzia immobiliare nel sistema.
+ *
+ * @param agencyData - Dati dell'agenzia da inserire (managerId opzionale)
+ * @returns Promise dell'agenzia creata con ID assegnato
+ * @throws Rilancia errori del database dopo logging
+ */
 export async function createAgency(agencyData: AgenciesInsertSchema) {
   try {
     const [createdAgency] = await db.insert(agencies).values({
       ...agencyData,
-      managerId: agencyData.managerId || null, // Gestisci managerId opzionale
+      managerId: agencyData.managerId || null,
     }).returning();
     return createdAgency;
   }
@@ -32,7 +47,13 @@ export async function createAgency(agencyData: AgenciesInsertSchema) {
   }
 }
 
-// Aggiorna un'agenzia esistente
+/**
+ * Aggiorna i dati di un'agenzia esistente.
+ *
+ * @param id - ID dell'agenzia da modificare
+ * @param agencyData - Campi da aggiornare (aggiornamento parziale supportato)
+ * @returns Promise dell'agenzia aggiornata con timestamp updatedAt automatico
+ */
 export async function updateAgency(id: number, agencyData: AgenciesUpdateSchema) {
   const [updatedAgency] = await db
     .update(agencies)
@@ -42,13 +63,22 @@ export async function updateAgency(id: number, agencyData: AgenciesUpdateSchema)
   return updatedAgency;
 }
 
-// Elimina un'agenzia
+/**
+ * Elimina un'agenzia dal database.
+ *
+ * @param id - ID dell'agenzia da rimuovere
+ * @returns Promise dell'agenzia eliminata (dati prima della cancellazione)
+ */
 export async function deleteAgency(id: number) {
   const [deletedAgency] = await db.delete(agencies).where(eq(agencies.id, id)).returning();
   return deletedAgency;
 }
 
-// Recupera tutti gli agenti senza agenzia
+/**
+ * Recupera tutti gli agenti immobiliari non ancora assegnati a nessuna agenzia.
+ *
+ * @returns Promise di array contenente agenti con ruolo 'agent' e agencyId nullo
+ */
 export async function getUnassignedAgents() {
   return db
     .select({
@@ -69,7 +99,11 @@ export async function getUnassignedAgents() {
     .orderBy(user.createdAt);
 }
 
-// Recupera tutte le agenzie con i dettagli del manager
+/**
+ * Recupera tutte le agenzie con informazioni complete sul manager associato.
+ *
+ * @returns Promise di array con agenzia e dati manager (nome, email, telefono) tramite LEFT JOIN
+ */
 export async function getAgenciesWithManagers() {
   return db
     .select({
@@ -85,7 +119,12 @@ export async function getAgenciesWithManagers() {
     .leftJoin(user, eq(agencies.managerId, user.id));
 }
 
-// Recupera tutti gli agenti di un'agenzia
+/**
+ * Recupera la lista di tutti gli agenti che appartengono a una specifica agenzia.
+ *
+ * @param agencyId - ID dell'agenzia di cui recuperare gli agenti
+ * @returns Promise di array con dettagli agenti (nome, email, telefono, data creazione)
+ */
 export async function getAgentsByAgencyId(agencyId: number) {
   return db
     .select({
@@ -100,16 +139,20 @@ export async function getAgentsByAgencyId(agencyId: number) {
     .where(eq(user.agencyId, agencyId));
 }
 
-// Assegna un agente a un'agenzia
+/**
+ * Assegna un agente a un'agenzia e aggiorna tutti i suoi annunci con l'agencyId.
+ *
+ * @param userId - ID dell'utente agente da assegnare
+ * @param agencyId - ID dell'agenzia di destinazione
+ * @returns Promise con dati utente aggiornato, conteggio post modificati e lista post
+ */
 export async function assignAgentToAgency(userId: number, agencyId: number) {
-  // Aggiorna l'utente
   const [updatedUser] = await db
     .update(user)
     .set({ agencyId })
     .where(eq(user.id, userId))
     .returning();
 
-  // Aggiorna tutti i post dell'agente con il nuovo agencyId
   const updatedPosts = await db
     .update(posts)
     .set({ agencyId })
@@ -127,16 +170,19 @@ export async function assignAgentToAgency(userId: number, agencyId: number) {
   };
 }
 
-// Rimuove un agente da un'agenzia e rimuove l'agencyId dai suoi post
+/**
+ * Rimuove un agente da un'agenzia e dissocia tutti i suoi annunci dall'agenzia.
+ *
+ * @param userId - ID dell'agente da rimuovere
+ * @returns Promise con dati utente aggiornato e conteggio post disassociati
+ */
 export async function removeAgentFromAgency(userId: number) {
-  // Aggiorna l'utente
   const [updatedUser] = await db
     .update(user)
     .set({ agencyId: null })
     .where(eq(user.id, userId))
     .returning();
 
-  // Rimuovi l'agencyId da tutti i post dell'agente
   const updatedPosts = await db
     .update(posts)
     .set({ agencyId: null })
@@ -154,9 +200,15 @@ export async function removeAgentFromAgency(userId: number) {
   };
 }
 
-// Crea una nuova agenzia e marca il manager come avente creato l'agenzia
+/**
+ * Crea un'agenzia assegnando automaticamente il manager e marcando che ha creato la sua agenzia.
+ *
+ * @param agencyData - Dati dell'agenzia da creare
+ * @param managerId - ID del manager che crea l'agenzia
+ * @returns Promise dell'agenzia creata
+ * @throws Errore se manager non trovato o ha già creato un'agenzia
+ */
 export async function createAgencyForManager(agencyData: AgenciesInsertSchema, managerId: number) {
-  // Controlla se il manager ha già creato un'agenzia
   const [manager] = await db.select().from(user).where(eq(user.id, managerId));
 
   if (!manager) {
@@ -168,13 +220,11 @@ export async function createAgencyForManager(agencyData: AgenciesInsertSchema, m
   }
 
   try {
-    // Crea l'agenzia
     const [createdAgency] = await db.insert(agencies).values({
       ...agencyData,
       managerId,
     }).returning();
 
-    // Aggiorna il manager: associa all'agenzia e marca come avente creato l'agenzia
     await db.update(user)
       .set({
         agencyId: createdAgency.id,
@@ -186,26 +236,38 @@ export async function createAgencyForManager(agencyData: AgenciesInsertSchema, m
   }
   catch (error) {
     console.error("Errore durante la creazione dell'agenzia per manager:", error);
-
-    // Se l'aggiornamento del manager fallisce, prova a eliminare l'agenzia creata
-    // Nota: questo non è atomico come una transazione, ma è il meglio che possiamo fare con neon-http
     throw error;
   }
 }
 
-// Verifica se un manager può creare un'agenzia
+/**
+ * Verifica se un manager ha i requisiti per creare una nuova agenzia.
+ *
+ * @param managerId - ID del manager da verificare
+ * @returns Promise di boolean (true se può creare, false se ha già creato o non esiste)
+ */
 export async function canManagerCreateAgency(managerId: number) {
   const [manager] = await db.select().from(user).where(eq(user.id, managerId));
   return manager && !manager.hasCreatedAgency;
 }
 
-// Recupera l'agenzia di un manager
+/**
+ * Recupera l'agenzia gestita da un manager specifico.
+ *
+ * @param managerId - ID del manager di cui cercare l'agenzia
+ * @returns Promise dell'agenzia trovata o undefined
+ */
 export async function getAgencyByManagerId(managerId: number) {
   const [agency] = await db.select().from(agencies).where(eq(agencies.managerId, managerId));
   return agency;
 }
 
-// Recupera agenzia per agente ID
+/**
+ * Recupera l'agenzia a cui appartiene un determinato agente.
+ *
+ * @param agentId - ID dell'agente di cui trovare l'agenzia
+ * @returns Promise dell'agenzia associata o undefined se agente non assegnato
+ */
 export async function getAgencyByAgentId(agentId: number) {
   const [result] = await db
     .select({

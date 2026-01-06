@@ -38,35 +38,35 @@ async function executePostSearch(filters) {
     const { page, limit, latitude, longitude, radius, ...otherFilters } = filters;
     const hasLocationSearch = latitude !== undefined && longitude !== undefined && radius !== undefined;
     const hasAdditionalFilters = Object.values(otherFilters).some(value => value !== undefined);
-    if (hasLocationSearch) {
+    if (hasLocationSearch && latitude !== undefined && longitude !== undefined && radius !== undefined) {
         if (hasAdditionalFilters) {
             const posts = await postsRepository.getPostsNearbyWithFilters({
-                latitude: latitude,
-                longitude: longitude,
-                radius: radius,
+                latitude,
+                longitude,
+                radius,
                 page,
                 limit,
                 filters: otherFilters,
             });
             const total = await postsRepository.countPostsNearbyWithFilters({
-                latitude: latitude,
-                longitude: longitude,
-                radius: radius,
+                latitude,
+                longitude,
+                radius,
                 filters: otherFilters,
             });
             return { posts, total };
         }
         const posts = await postsRepository.getPostsNearby({
-            latitude: latitude,
-            longitude: longitude,
-            radius: radius,
+            latitude,
+            longitude,
+            radius,
             page,
             limit,
         });
         const total = await postsRepository.countPostsNearby({
-            latitude: latitude,
-            longitude: longitude,
-            radius: radius,
+            latitude,
+            longitude,
+            radius,
         });
         return { posts, total };
     }

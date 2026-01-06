@@ -7,7 +7,12 @@ export interface GeocodeResult {
 }
 
 /**
- * Geocoding usando Nominatim (OpenStreetMap)
+ * Converte un indirizzo italiano in coordinate geografiche usando Nominatim (OpenStreetMap).
+ *
+ * @param address - Via e numero civico
+ * @param city - Città italiana
+ * @param cap - Codice di avviamento postale
+ * @returns Promise delle coordinate (lat/lon) e indirizzo formattato o null se geocoding fallisce
  */
 export async function geocodeAddress(
   address: string,

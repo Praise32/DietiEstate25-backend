@@ -30,6 +30,13 @@ async function resolvePostCoordinates(post: PostInsertSchema): Promise<Coordinat
   return { lat: geocoded.latitude, lon: geocoded.longitude };
 }
 
+/**
+ * Crea un nuovo annuncio immobiliare con geocodifica automatica dell'indirizzo.
+ *
+ * @param post - Dati del post da inserire (se coordinate assenti, viene eseguita geocodifica)
+ * @returns Promise del post creato con ID assegnato dal database
+ * @throws Errore se la geocodifica fallisce e le coordinate non sono fornite esplicitamente
+ */
 export async function createPost(post: PostInsertSchema): Promise<PostIdSchema> {
   const coordinates = await resolvePostCoordinates(post);
 
@@ -46,6 +53,12 @@ export async function createPost(post: PostInsertSchema): Promise<PostIdSchema> 
   return insertedPost;
 }
 
+/**
+ * Recupera annunci immobiliari in un raggio geografico specificato usando PostGIS.
+ *
+ * @param searchParams - Parametri di ricerca contenenti coordinate, raggio (metri) e paginazione
+ * @returns Promise di array di post ordinati per distanza crescente dal centro
+ */
 export async function getPostsNearby(searchParams: NearbySearchParams) {
   const { latitude, longitude, radius, page, limit } = searchParams;
   const offset = calculateOffset(page, limit);
@@ -73,6 +86,12 @@ export async function getPostsNearby(searchParams: NearbySearchParams) {
   return nearbyPosts;
 }
 
+/**
+ * Conta il numero totale di post in un raggio geografico per supportare paginazione.
+ *
+ * @param searchParams - Coordinate del centro di ricerca e raggio in metri
+ * @returns Promise del conteggio totale di annunci trovati nell'area
+ */
 export async function countPostsNearby(searchParams: Pick<NearbySearchParams, "latitude" | "longitude" | "radius">) {
   const { latitude, longitude, radius } = searchParams;
   const searchCenterPoint = createSearchCenterPoint(longitude, latitude);
@@ -95,6 +114,12 @@ interface NearbyWithFiltersParams extends NearbySearchParams {
   filters: Omit<SearchFilters, "latitude" | "longitude" | "radius" | "page" | "limit">;
 }
 
+/**
+ * Ricerca geografica avanzata con filtri aggiuntivi (prezzo, metratura, stanze, ecc.).
+ *
+ * @param searchParams - Parametri di ricerca geografica più filtri specifici immobiliari
+ * @returns Promise di array di post filtrati e ordinati per distanza
+ */
 export async function getPostsNearbyWithFilters(searchParams: NearbyWithFiltersParams) {
   const { latitude, longitude, radius, filters, page, limit } = searchParams;
   const offset = calculateOffset(page, limit);
@@ -126,6 +151,12 @@ export async function getPostsNearbyWithFilters(searchParams: NearbyWithFiltersP
   return nearbyPosts;
 }
 
+/**
+ * Conta post in area geografica applicando filtri di ricerca avanzati.
+ *
+ * @param searchParams - Coordinate, raggio e filtri immobiliari da applicare
+ * @returns Promise del numero totale di risultati corrispondenti ai criteri
+ */
 export async function countPostsNearbyWithFilters(
   searchParams: Pick<NearbyWithFiltersParams, "latitude" | "longitude" | "radius" | "filters">,
 ) {
@@ -150,6 +181,13 @@ export async function countPostsNearbyWithFilters(
   return Number(result[0]?.count ?? 0);
 }
 
+/**
+ * Aggiorna i dati di un annuncio immobiliare esistente.
+ *
+ * @param postId - ID univoco del post da modificare
+ * @param postBody - Oggetto contenente i campi da aggiornare (aggiornamento parziale supportato)
+ * @returns Promise del post aggiornato con tutti i campi
+ */
 export async function updatePost(postId: number, postBody: PostUpdateSchema) {
   const [post] = await db
     .update(posts)
@@ -159,6 +197,13 @@ export async function updatePost(postId: number, postBody: PostUpdateSchema) {
   return post;
 }
 
+/**
+ * Recupera un singolo annuncio tramite identificativo univoco.
+ *
+ * @param id - ID numerico del post richiesto
+ * @returns Promise del post trovato o undefined se non esistente
+ * @throws Rilancia eventuali errori del database dopo averli loggati
+ */
 export async function getPostById(id: number): Promise<PostSelectSchema | undefined> {
   try {
     const [post] = await db.select().from(posts).where(eq(posts.id, id));
@@ -170,11 +215,23 @@ export async function getPostById(id: number): Promise<PostSelectSchema | undefi
   }
 }
 
+/**
+ * Elimina un annuncio immobiliare dal database.
+ *
+ * @param id - ID del post da rimuovere definitivamente
+ * @returns Promise del post eliminato (dati prima della cancellazione) o undefined se non trovato
+ */
 export async function deletePost(id: number): Promise<PostSelectSchema | undefined> {
   const [deletedPost] = await db.delete(posts).where(eq(posts.id, id)).returning();
   return deletedPost;
 }
 
+/**
+ * Recupera tutti gli annunci con filtri opzionali e paginazione (senza ricerca geografica).
+ *
+ * @param filters - Criteri di ricerca contenenti paginazione e filtri immobiliari (città, prezzo, stanze, ecc.)
+ * @returns Promise di array di post ordinati per data creazione decrescente
+ */
 export async function getAllPosts(filters: SearchFilters) {
   const { page, limit, ...searchParams } = filters;
   const offset = calculateOffset(page, limit);
@@ -194,6 +251,12 @@ export async function getAllPosts(filters: SearchFilters) {
   return query;
 }
 
+/**
+ * Recupera tutti gli annunci pubblicati da una specifica agenzia immobiliare.
+ *
+ * @param agencyId - ID dell'agenzia di cui recuperare gli annunci
+ * @returns Promise di array di post dell'agenzia ordinati dal più recente
+ */
 export async function getPostsByAgencyId(agencyId: number) {
   const agencyPosts = await db
     .select()
@@ -204,6 +267,12 @@ export async function getPostsByAgencyId(agencyId: number) {
   return agencyPosts;
 }
 
+/**
+ * Conta il numero totale di post applicando filtri di ricerca (esclude paginazione).
+ *
+ * @param filters - Criteri di filtro senza parametri di paginazione
+ * @returns Promise del conteggio totale per calcolare pagine disponibili
+ */
 export async function countAllPosts(filters: Omit<SearchFilters, "page" | "limit">) {
   const conditions = buildWhereConditions(filters);
 

@@ -64,6 +64,17 @@ function createUserFromToken(decodedToken: TokenPayload): Express.User {
   };
 }
 
+/**
+ * Middleware di autenticazione JWT per proteggere endpoint riservati.
+ *
+ * Verifica la presenza e validità del token Bearer nell'header Authorization,
+ * decodifica il payload JWT e arricchisce req.user con i dati dell'utente.
+ *
+ * @param req - Richiesta Express (verrà arricchita con req.user se autenticazione valida)
+ * @param res - Risposta Express per inviare errori 401 se autenticazione fallisce
+ * @param next - Callback per passare al middleware successivo se autenticato
+ * @throws Invia risposta 401 se token mancante, malformato o non valido
+ */
 export async function authMiddleware(
   req: Request,
   res: Response,
@@ -132,6 +143,17 @@ async function canUserModifyPost(
   return false;
 }
 
+/**
+ * Middleware di autorizzazione per verificare i permessi di modifica su un post.
+ *
+ * Controlla se l'utente autenticato può modificare il post specificato tramite ID nei parametri.
+ * Autorizza: proprietari del post, manager dell'agenzia associata, admin e support.
+ *
+ * @param req - Richiesta Express con req.user (popolato da authMiddleware) e req.params.id
+ * @param res - Risposta Express per inviare errori 400/403/404
+ * @param next - Callback per procedere se l'utente è autorizzato
+ * @throws Invia 400 se ID non valido, 404 se post non trovato, 403 se utente non autorizzato
+ */
 export async function isOwnerMiddlewarePosts(
   req: Request,
   res: Response,

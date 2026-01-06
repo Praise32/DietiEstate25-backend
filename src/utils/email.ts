@@ -14,6 +14,13 @@ const transporter = nodemailer.createTransport({
   },
 });
 
+/**
+ * Invia email di invito alla registrazione con link temporaneo contenente token JWT.
+ *
+ * @param email - Indirizzo email del destinatario invitato
+ * @param token - Token JWT univoco per completare la registrazione (validità 24h)
+ * @throws Errore se invio email fallisce tramite SMTP Gmail
+ */
 export async function sendInviteEmail(email: string, token: string) {
   const registrationLink = `${env.FRONTEND_URL}/register/invite/${token}`;
 
@@ -57,14 +64,20 @@ export async function sendInviteEmail(email: string, token: string) {
 }
 
 /**
- * Invia email di notifica all'agente quando viene richiesta una visita
+ * Invia email di notifica all'agente quando un cliente richiede una nuova visita immobiliare.
+ *
+ * @param agentEmail - Email dell'agente assegnato alla visita (undefined se non specificato)
+ * @param userName - Nome del cliente che ha richiesto l'appuntamento
+ * @param propertyTitle - Titolo dell'immobile oggetto della visita
+ * @param appointmentDate - Data e ora richieste per la visita
+ * @param _appointmentId - ID appuntamento (parametro non utilizzato, prefisso _ per convenzione)
  */
 export async function sendAppointmentNotificationEmail(
   agentEmail: string | undefined,
   userName: string,
   propertyTitle: string,
   appointmentDate: Date,
-  _appointmentId: number, // Prefisso _ per indicare parametro non usato
+  _appointmentId: number,
 ): Promise<void> {
   if (!agentEmail)
     return;
@@ -92,7 +105,12 @@ export async function sendAppointmentNotificationEmail(
 }
 
 /**
- * Invia email di conferma al cliente quando la visita viene confermata
+ * Invia email di conferma al cliente quando l'agente conferma la disponibilità per la visita.
+ *
+ * @param userEmail - Email del cliente che ha richiesto l'appuntamento
+ * @param propertyTitle - Titolo immobile per cui è confermata la visita
+ * @param appointmentDate - Data e ora confermate
+ * @param notes - Note aggiuntive dall'agente (istruzioni, indirizzo preciso, ecc.)
  */
 export async function sendAppointmentConfirmationEmail(
   userEmail: string | undefined,
@@ -127,7 +145,12 @@ export async function sendAppointmentConfirmationEmail(
 }
 
 /**
- * Invia email di rifiuto al cliente quando la visita viene rifiutata
+ * Invia email di rifiuto al cliente quando l'agente non può confermare la data richiesta.
+ *
+ * @param userEmail - Email del cliente da notificare
+ * @param propertyTitle - Titolo immobile per cui la visita non è disponibile
+ * @param appointmentDate - Data originariamente richiesta ma non disponibile
+ * @param notes - Motivazione del rifiuto o suggerimenti per date alternative
  */
 export async function sendAppointmentRejectionEmail(
   userEmail: string | undefined,
@@ -162,7 +185,13 @@ export async function sendAppointmentRejectionEmail(
 }
 
 /**
- * Invia email di notifica al cliente quando l'appuntamento viene riprogrammato
+ * Invia email di notifica al cliente quando l'appuntamento viene riprogrammato a nuova data.
+ *
+ * @param userEmail - Email del cliente da informare della modifica
+ * @param propertyTitle - Titolo immobile oggetto della visita
+ * @param oldDate - Data originale dell'appuntamento
+ * @param newDate - Nuova data riprogrammata
+ * @param notes - Motivazione della modifica (opzionale)
  */
 export async function sendAppointmentRescheduledEmail(
   userEmail: string | undefined,
