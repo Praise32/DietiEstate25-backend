@@ -24,17 +24,16 @@ Questa applicazione fornisce API RESTful robuste per la gestione di annunci immo
   - Login tramite Google
   - Gestione Ruoli (Admin, Manager, Agent, Customer)
   - Protezione rotte tramite JWT Bearer Token
-  
+
 - **Gestione Immobili (Posts):**
   - CRUD completo degli annunci immobiliari
   - **Geolocalizzazione:** Salvataggio coordinate e ricerca immobili per raggio (km) tramite PostGIS
   - Filtri avanzati (prezzo, stanze, mq, classe energetica, ecc.)
   - Upload multiplo di immagini su AWS S3
-  
+
 - **Agenzie:**
   - Gestione profili agenzie
   - Associazione Manager e Agenti
-  
 - **Utility:**
   - Servizio Meteo integrato per visualizzare le previsioni nella zona dell'immobile
   - Sistema di inviti via email per nuovi membri dello staff
@@ -51,19 +50,22 @@ Questa applicazione fornisce API RESTful robuste per la gestione di annunci immo
 ### Passaggi per l'installazione
 
 1. **Clona il repository:**
+
    ```bash
    git clone <url-repository>
    cd DietiDeals24-backend
    ```
 
 2. **Installa le dipendenze:**
+
    ```bash
    npm i
    ```
 
 3. **Configura le variabili d'ambiente:**
-   
+
    Crea un file `.env` nella root del progetto basandoti su `.env.example`:
+
    ```env
    PORT=5003
    DATABASE_URL="postgresql://user:pass@host/db?sslmode=require"
@@ -87,6 +89,7 @@ Questa applicazione fornisce API RESTful robuste per la gestione di annunci immo
    ```
 
 4. **Esegui le migrazioni del database:**
+
    ```bash
    npx drizzle-kit push
    ```

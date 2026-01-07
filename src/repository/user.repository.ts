@@ -105,6 +105,14 @@ export async function getUserByIdentifier(identifier: string) {
  * Crea un nuovo utente nel sistema arricchendo i dati con il nome del ruolo.
  *
  * @param userBody - Dati dell'utente da registrare (password già hashata)
+ * @param userBody.name - Nome completo dell'utente
+ * @param userBody.email - Email dell'utente (univoca)
+ * @param userBody.phone - Numero di telefono dell'utente
+ * @param userBody.password - Password hashata con bcrypt
+ * @param userBody.roleId - ID del ruolo (1=admin, 2=agent, 3=customer)
+ * @param userBody.agencyId - ID dell'agenzia (opzionale, per agenti)
+ * @param userBody.googleId - Google ID per autenticazione OAuth (opzionale)
+ * @param userBody.hasCreatedAgency - Flag indicante se ha creato un'agenzia
  * @returns Promise dell'utente creato con proprietà 'role' aggiunta o null se fallisce
  */
 export async function createUser(userBody: {

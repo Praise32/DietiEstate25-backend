@@ -7,6 +7,12 @@ import { invites } from "@/db/schema/invites";
  * Crea un nuovo invito per registrazione utente con token univoco.
  *
  * @param data - Dati invito contenenti email destinatario, ruolo, token JWT, invitedBy e scadenza
+ * @param data.email - Email del destinatario dell'invito
+ * @param data.role - Ruolo da assegnare all'utente (admin/agent/customer)
+ * @param data.token - Token JWT univoco per validazione invito
+ * @param data.invitedBy - ID dell'utente che ha creato l'invito
+ * @param data.expiresAt - Data di scadenza dell'invito
+ * @param data.agencyId - ID dell'agenzia (opzionale, per agenti)
  * @returns Promise dell'invito creato con ID assegnato
  */
 export async function createInvite(data: {

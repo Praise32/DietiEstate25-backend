@@ -437,6 +437,10 @@ export async function rescheduleAppointment(id: number, newDate: Date, notes?: s
  * Recupera solo le date/orari già occupati per evitare sovrapposizioni (endpoint pubblico).
  *
  * @param filters - Filtri opzionali per agentId, postId e range date
+ * @param filters.agentId - ID dell'agente per filtrare gli appuntamenti
+ * @param filters.postId - ID dell'annuncio per filtrare gli appuntamenti
+ * @param filters.start - Data di inizio del range temporale
+ * @param filters.end - Data di fine del range temporale
  * @returns Promise di array con solo requestedDate degli slot occupati (pending/confirmed)
  */
 export async function getOccupiedSlots(filters: { agentId?: number; postId?: number; start?: Date; end?: Date }) {
