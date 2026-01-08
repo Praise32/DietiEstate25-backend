@@ -98,7 +98,7 @@ export async function sendAppointmentNotificationEmail(
     <p>Il cliente <strong>${userName}</strong> ha richiesto una visita per l'immobile "<strong>${propertyTitle}</strong>".</p>
     <p>Data e ora richieste: <strong>${formattedDate}</strong></p>
     <p>Per confermare o rifiutare questa richiesta, accedi al tuo pannello di controllo.</p>
-    <p>Cordiali saluti,<br>Team DietiDeals24</p>
+    <p>Cordiali saluti,<br>Team DietiEstate25</p>
   `;
 
   await sendEmail(agentEmail, subject, html);
@@ -138,7 +138,7 @@ export async function sendAppointmentConfirmationEmail(
     <p>Data e ora: <strong>${formattedDate}</strong></p>
     ${notes ? `<p>Note aggiuntive: ${notes}</p>` : ""}
     <p>Ti aspettiamo!</p>
-    <p>Cordiali saluti,<br>Team DietiDeals24</p>
+    <p>Cordiali saluti,<br>Team DietiEstate25</p>
   `;
 
   await sendEmail(userEmail, subject, html);
@@ -178,7 +178,7 @@ export async function sendAppointmentRejectionEmail(
        prevista per <strong>${formattedDate}</strong> non può essere confermata.</p>
     ${notes ? `<p>Motivazione: ${notes}</p>` : ""}
     <p>Ti invitiamo a selezionare una nuova data e ora per la tua visita.</p>
-    <p>Cordiali saluti,<br>Team DietiDeals24</p>
+    <p>Cordiali saluti,<br>Team DietiEstate25</p>
   `;
 
   await sendEmail(userEmail, subject, html);
@@ -230,7 +230,7 @@ export async function sendAppointmentRescheduledEmail(
     <p>Nuova data: <strong>${formattedNewDate}</strong></p>
     ${notes ? `<p>Note: ${notes}</p>` : ""}
     <p>Se la nuova data non è adatta alle tue esigenze, ti preghiamo di contattarci.</p>
-    <p>Cordiali saluti,<br>Team DietiDeals24</p>
+    <p>Cordiali saluti,<br>Team DietiEstate25</p>
   `;
 
   await sendEmail(userEmail, subject, html);

@@ -35,7 +35,7 @@ export async function geocodeAddress(
         addressdetails: 1,
       },
       headers: {
-        "User-Agent": "DietiDeals24-Backend/1.0",
+        "User-Agent": "DietiEstate25-Backend/1.0",
       },
     });
 

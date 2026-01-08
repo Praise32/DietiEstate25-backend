@@ -53,7 +53,7 @@ Questa applicazione fornisce API RESTful robuste per la gestione di annunci immo
 
    ```bash
    git clone <url-repository>
-   cd DietiDeals24-backend
+   cd DietiEstate25-backend
    ```
 
 2. **Installa le dipendenze:**

@@ -260,6 +260,9 @@ router.post("/register/:token", async (req, res) => {
     console.error("Errore nella decodifica del token:", error);
   }
 
+  // Se è un manager con un'agenzia assegnata, imposta hasCreatedAgency a true
+  const isManagerWithAgency = invite.role === "manager" && agencyId !== null;
+
   // Crea nuovo utente
   const user = await userRepository.createUser({
     email: invite.email,
@@ -268,7 +271,13 @@ router.post("/register/:token", async (req, res) => {
     phone,
     roleId,
     agencyId,
+    hasCreatedAgency: isManagerWithAgency,
   });
+
+  // Se è un manager con agenzia, aggiorna l'agenzia con il nuovo managerId
+  if (isManagerWithAgency && user?.id) {
+    await agenciesRepository.updateAgency(agencyId, { managerId: user.id });
+  }
 
   await inviteRepository.markInviteAsUsed(token);
 

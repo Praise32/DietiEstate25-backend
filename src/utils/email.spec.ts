@@ -80,7 +80,7 @@ describe("email.ts - sendAppointmentRescheduledEmail (Unit Testing Accademico)",
     expect(callArgs.html).toContain(propertyTitle);
     expect(callArgs.html).toContain(notes); // BRANCH COVERAGE: notes presente
     expect(callArgs.html).toContain("<strike>"); // Verifica formattazione oldDate
-    expect(callArgs.html).toContain("Team DietiDeals24");
+    expect(callArgs.html).toContain("Team DietiEstate25");
   });
 
   /**

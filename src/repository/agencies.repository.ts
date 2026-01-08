@@ -48,13 +48,38 @@ export async function createAgency(agencyData: AgenciesInsertSchema) {
 }
 
 /**
- * Aggiorna i dati di un'agenzia esistente.
+ * Aggiorna i dati di un'agenzia esistente, gestendo il cambio di manager.
  *
  * @param id - ID dell'agenzia da modificare
  * @param agencyData - Campi da aggiornare (aggiornamento parziale supportato)
  * @returns Promise dell'agenzia aggiornata con timestamp updatedAt automatico
  */
 export async function updateAgency(id: number, agencyData: AgenciesUpdateSchema) {
+  // Se viene aggiornato il managerId, gestisci il cambio di manager
+  if ("managerId" in agencyData) {
+    const [currentAgency] = await db.select().from(agencies).where(eq(agencies.id, id));
+
+    // Se c'era un vecchio manager, resetta il suo hasCreatedAgency
+    if (currentAgency?.managerId && currentAgency.managerId !== agencyData.managerId) {
+      await db.update(user)
+        .set({
+          hasCreatedAgency: false,
+          agencyId: null,
+        })
+        .where(eq(user.id, currentAgency.managerId));
+    }
+
+    // Se c'è un nuovo manager, imposta il suo hasCreatedAgency
+    if (agencyData.managerId) {
+      await db.update(user)
+        .set({
+          hasCreatedAgency: true,
+          agencyId: id,
+        })
+        .where(eq(user.id, agencyData.managerId));
+    }
+  }
+
   const [updatedAgency] = await db
     .update(agencies)
     .set({ ...agencyData, updatedAt: new Date() })
@@ -64,12 +89,29 @@ export async function updateAgency(id: number, agencyData: AgenciesUpdateSchema)
 }
 
 /**
- * Elimina un'agenzia dal database.
+ * Elimina un'agenzia dal database e resetta hasCreatedAgency del manager.
  *
  * @param id - ID dell'agenzia da rimuovere
  * @returns Promise dell'agenzia eliminata (dati prima della cancellazione)
  */
 export async function deleteAgency(id: number) {
+  // Prima recupera l'agenzia per ottenere il managerId
+  const [agency] = await db.select().from(agencies).where(eq(agencies.id, id));
+
+  if (!agency) {
+    throw new Error("Agenzia non trovata");
+  }
+
+  // Se l'agenzia ha un manager, resetta il suo hasCreatedAgency
+  if (agency.managerId) {
+    await db.update(user)
+      .set({
+        hasCreatedAgency: false,
+        agencyId: null,
+      })
+      .where(eq(user.id, agency.managerId));
+  }
+
   const [deletedAgency] = await db.delete(agencies).where(eq(agencies.id, id)).returning();
   return deletedAgency;
 }
