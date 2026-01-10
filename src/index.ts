@@ -20,7 +20,9 @@ const corsOptions = {
   origin: [
     "http://localhost:4200",
     "https://accounts.google.com",
-  ],
+    "https://dietiestates-frontend-12428859047.europe-west1.run.app",
+    env.FRONTEND_URL,
+  ].filter(Boolean),
   methods: ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
   allowedHeaders: ["Content-Type", "Authorization"],
   credentials: true,

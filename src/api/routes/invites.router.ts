@@ -275,7 +275,7 @@ router.post("/register/:token", async (req, res) => {
   });
 
   // Se è un manager con agenzia, aggiorna l'agenzia con il nuovo managerId
-  if (isManagerWithAgency && user?.id) {
+  if (isManagerWithAgency && user?.id && agencyId) {
     await agenciesRepository.updateAgency(agencyId, { managerId: user.id });
   }
 

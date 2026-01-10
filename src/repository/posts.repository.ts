@@ -188,12 +188,63 @@ export async function countPostsNearbyWithFilters(
  * @param postBody - Oggetto contenente i campi da aggiornare (aggiornamento parziale supportato)
  * @returns Promise del post aggiornato con tutti i campi
  */
+/**
+ * Aggiorna un annuncio immobiliare esistente con ricalcolo automatico delle coordinate.
+ *
+ * Se vengono modificati indirizzo, città o CAP, esegue automaticamente
+ * il geocoding per aggiornare la posizione geografica del marker sulla mappa.
+ *
+ * @param postId - ID del post da aggiornare
+ * @param postBody - Campi da modificare (può includere address, city, cap)
+ * @returns Promise del post aggiornato con nuove coordinate se l'indirizzo è cambiato
+ * @throws Errore se il geocoding fallisce per un indirizzo modificato
+ */
 export async function updatePost(postId: number, postBody: PostUpdateSchema) {
+  // Verifica se è stato modificato l'indirizzo (address, city o cap)
+  const addressChanged = postBody.address !== undefined
+    || postBody.city !== undefined
+    || postBody.cap !== undefined;
+
+  let updateData = { ...postBody };
+
+  // Se l'indirizzo è cambiato, ricalcola le coordinate geografiche
+  if (addressChanged) {
+    // Recupera il post esistente per avere i dati completi dell'indirizzo
+    const [existingPost] = await db.select().from(posts).where(eq(posts.id, postId));
+
+    if (!existingPost) {
+      throw new Error(`Post con ID ${postId} non trovato`);
+    }
+
+    // Usa i nuovi valori se forniti, altrimenti mantieni quelli esistenti
+    const finalAddress = postBody.address ?? existingPost.address;
+    const finalCity = postBody.city ?? existingPost.city;
+    const finalCap = postBody.cap ?? existingPost.cap;
+
+    // Esegui geocoding per ottenere le nuove coordinate
+    const geocoded = await geocodeAddress(finalAddress, finalCity, finalCap.toString());
+
+    if (!geocoded) {
+      throw new Error("Impossibile geocodificare il nuovo indirizzo fornito");
+    }
+
+    // Aggiungi le coordinate aggiornate all'update
+    updateData = {
+      ...updateData,
+      location: {
+        lat: geocoded.latitude,
+        lon: geocoded.longitude,
+      },
+    };
+  }
+
+  // Esegui l'aggiornamento con coordinate aggiornate se necessario
   const [post] = await db
     .update(posts)
-    .set(postBody)
+    .set(updateData)
     .where(eq(posts.id, postId))
     .returning();
+
   return post;
 }
 
