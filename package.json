@@ -1,5 +1,5 @@
 {
-  "name": "prova",
+  "name": "dietiestates25-backend",
   "type": "module",
   "version": "1.0.0",
   "description": "aa",
@@ -46,6 +46,7 @@
     "passport-jwt": "^4.0.1",
     "passport-local": "^1.0.0",
     "pg": "^8.15.6",
+    "sharp": "^0.34.5",
     "zod": "^3.24.3"
   },
   "devDependencies": {
@@ -64,6 +65,7 @@
     "@types/passport-jwt": "^4.0.1",
     "@types/passport-local": "^1.0.38",
     "@types/pg": "^8.11.14",
+    "@types/sharp": "^0.31.1",
     "@types/supertest": "^6.0.3",
     "drizzle-kit": "^0.31.4",
     "eslint-plugin-format": "^1.0.1",

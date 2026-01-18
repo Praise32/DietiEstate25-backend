@@ -5,7 +5,7 @@ import express from "express";
 import validate from "express-zod-safe";
 import { z } from "zod";
 
-import { deleteFileFromS3, upload } from "@/api/middleware/photo.middleware";
+import { compressAndUploadToS3, deleteFileFromS3, upload } from "@/api/middleware/photo.middleware";
 import { db } from "@/db";
 import {
   postIdSchema,
@@ -283,26 +283,36 @@ router.post("/:id/upload", authMiddleware, isOwnerMiddlewarePosts, upload.array(
     return;
   }
 
-  const filesS3 = req.files as Express.MulterS3.File[];
-  const uploadedFiles = filesS3.map(file => ({
-    url: file.location,
-    fileName: file.key,
-    bucket: file.bucket,
-    mimetype: file.contentType,
-    size: file.size,
-  }));
+  try {
+    // Comprimi e carica ogni file su S3
+    const files = req.files as Express.Multer.File[];
+    const uploadPromises = files.map(file => compressAndUploadToS3(file));
+    const uploadedFilesInfo = await Promise.all(uploadPromises);
 
-  const photos = [];
-  for (const file of uploadedFiles) {
-    const photo = await photoRepository.createPhoto({
-      url: file.url,
-      filename: file.fileName,
-      userId,
-      postsId: postId,
-    });
-    photos.push(photo);
+    const uploadedFiles = uploadedFilesInfo.map(file => ({
+      url: file.location,
+      fileName: file.key,
+      bucket: file.bucket,
+      mimetype: file.contentType,
+      size: file.size,
+    }));
+
+    const photos = [];
+    for (const file of uploadedFiles) {
+      const photo = await photoRepository.createPhoto({
+        url: file.url,
+        filename: file.fileName,
+        userId,
+        postsId: postId,
+      });
+      photos.push(photo);
+    }
+    res.status(201).json(photos);
   }
-  res.status(201).json(photos);
+  catch (error) {
+    console.error("Errore durante l'upload e compressione delle immagini:", error);
+    sendInternalErrorResponse(res, "Errore durante l'elaborazione delle immagini.");
+  }
 });
 
 async function isUserAuthorizedToDeletePhoto(
