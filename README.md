@@ -12,7 +12,9 @@ Questa applicazione fornisce API RESTful robuste per la gestione di annunci immo
 - **ORM:** Drizzle ORM
 - **Autenticazione:** Passport.js (JWT, Google OAuth 2.0, Local Strategy)
 - **Storage File:** AWS S3 (tramite Multer S3) per il caricamento delle foto
+- **Image Processing:** Sharp (compressione e ridimensionamento immagini prima dell'upload)
 - **Validazione:** Zod & Express-Zod-Safe
+- **Containerizzazione:** Docker & Docker Compose
 - **Servizi Esterni:**
   - OpenMeteo (Previsioni meteo localizzate)
   - Google OAuth (Social Login)
@@ -103,13 +105,21 @@ Il server sarà disponibile su `http://localhost:5003` (o sulla porta specificat
 
 ## 📜 Script Disponibili
 
-- `npm run dev` - Avvia il server in modalità sviluppo (hot-reload)
+- `npm run dev` - Avvia il server in modalità sviluppo (hot-reload con tsx)
+- `npm run dev:debug` - Avvia in modalità sviluppo con trace-warnings
 - `npm run build` - Compila il progetto TypeScript in JavaScript nella cartella `dist`
 - `npm start` - Avvia il server di produzione (richiede build)
+- `npm run start_docker` - Build e avvia l'applicazione con Docker Compose
+- `npm run type-check` - Verifica i tipi TypeScript senza compilare
 - `npm run lint` - Esegue il controllo del codice con ESLint
+- `npm run lint:fix` - Corregge automaticamente gli errori ESLint
+- `npm run lint:cache` - ESLint con cache per esecuzioni più veloci
 - `npm run format` - Formatta il codice con Prettier
+- `npm run format:check` - Verifica la formattazione senza modificare
+- `npm run quality` - Esegue lint, type-check e format:check insieme
 - `npm test` - Esegue i test con Jest
-- `npm run test:coverage` - Esegue i test con coverage
+- `npm run test:watch` - Esegue i test in modalità watch
+- `npm run test:coverage` - Esegue i test con report di coverage
 
 ## 📂 Struttura del Progetto
 
